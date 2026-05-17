@@ -153,7 +153,7 @@ export default function Reports() {
           { id:'materials',  label:'Материали' },
           { id:'defects',    label:'Брак' },
         ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => { setData(null); setTab(t.id) }}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap
               ${tab===t.id ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-white'}`}>
             {t.label}
