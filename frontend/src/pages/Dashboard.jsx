@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 import { OrderStatusBadge, UrgentBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
+import TooltipUI from '../components/ui/Tooltip'
 import { format, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
 
@@ -13,8 +14,8 @@ const STATUS_COLORS = {
   'ГОТОВА':'#22c55e','ДОСТАВЕНА':'#6b7280','ОТКАЗАНА':'#ef4444',
 }
 
-function StatCard({ label, value, sub, color = 'text-white', icon }) {
-  return (
+function StatCard({ label, value, sub, color = 'text-white', icon, tooltip, delta }) {
+  const card = (
     <div className="card flex items-start gap-4">
       {icon && (
         <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
@@ -23,13 +24,28 @@ function StatCard({ label, value, sub, color = 'text-white', icon }) {
           </svg>
         </div>
       )}
-      <div>
-        <p className="text-xs text-muted uppercase tracking-wide mb-1">{label}</p>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1">
+          <p className="text-xs text-muted uppercase tracking-wide">{label}</p>
+          {tooltip && (
+            <TooltipUI text={tooltip}>
+              <svg className="w-3.5 h-3.5 text-muted/60 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </TooltipUI>
+          )}
+        </div>
         <p className={`text-2xl font-bold ${color}`}>{value}</p>
         {sub && <p className="text-xs text-muted mt-0.5">{sub}</p>}
+        {delta !== undefined && (
+          <p className={`text-xs mt-0.5 font-medium ${delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : 'text-muted'}`}>
+            {delta > 0 ? '↑' : delta < 0 ? '↓' : '='} {Math.abs(delta)}% спрямо миналия месец
+          </p>
+        )}
       </div>
     </div>
   )
+  return card
 }
 
 // Production dashboard
@@ -108,6 +124,13 @@ function AdminDashboard() {
     ? ((margin / data.revenue.revenue_delivered) * 100).toFixed(1)
     : 0
 
+  const ordersDelta = data.prevMonth?.total_orders > 0
+    ? Math.round(((data.revenue.total_orders - data.prevMonth.total_orders) / data.prevMonth.total_orders) * 100)
+    : null
+  const revenueDelta = data.prevMonth?.revenue_delivered > 0
+    ? Math.round(((data.revenue.revenue_delivered - data.prevMonth.revenue_delivered) / data.prevMonth.revenue_delivered) * 100)
+    : null
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -120,6 +143,8 @@ function AdminDashboard() {
         <StatCard
           label="Поръчки този месец"
           value={data.revenue.total_orders}
+          tooltip="Брой поръчки създадени от началото на текущия месец (без отказаните)"
+          delta={ordersDelta}
           icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
         />
         {isAdmin && (
@@ -127,6 +152,8 @@ function AdminDashboard() {
             <StatCard
               label="Приход (доставени)"
               value={`${Number(data.revenue.revenue_delivered).toLocaleString()} €`}
+              tooltip="Сума от продажните цени на поръчките маркирани като ДОСТАВЕНА този месец"
+              delta={revenueDelta}
               icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               color="text-green-400"
             />
@@ -134,27 +161,53 @@ function AdminDashboard() {
               label="Марж"
               value={`${marginPct}%`}
               sub={`${margin.toFixed(0)} € чиста печалба`}
+              tooltip="(Приход − Себестойност) / Приход × 100%. Отчита само доставените поръчки."
               color={margin > 0 ? 'text-green-400' : 'text-danger'}
               icon="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
             />
+            <StatCard
+              label="Очакван приход (pipeline)"
+              value={`${Number(data.revenue.pipeline_value).toLocaleString()} €`}
+              tooltip="Сума на продажните цени на всички активни поръчки (не доставени, не отказани) — потенциален приход при завършване"
+              color="text-accent"
+              icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+            />
           </>
         )}
-        <StatCard
-          label="Брак този месец"
-          value={data.defects.count}
-          sub={isAdmin ? `${data.defects.total_cost} €` : undefined}
-          color={data.defects.count > 5 ? 'text-danger' : 'text-white'}
-          icon="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z"
-        />
-        {data.lowStockCount > 0 && (
+        {!isAdmin && (
           <StatCard
-            label="Материали под минимум"
-            value={data.lowStockCount}
-            color="text-yellow-400"
-            icon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+            label="Брак този месец"
+            value={data.defects.count}
+            color={data.defects.count > 5 ? 'text-danger' : 'text-white'}
+            tooltip="Брой регистрирани бракове от началото на месеца"
+            icon="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z"
           />
         )}
       </div>
+
+      {/* Second stats row for admin */}
+      {isAdmin && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <StatCard
+            label="Брак този месец"
+            value={data.defects.count}
+            sub={`${data.defects.total_cost} € загуба`}
+            color={data.defects.count > 5 ? 'text-danger' : 'text-white'}
+            tooltip="Брой регистрирани бракове и изчислените загуби от материали и труд"
+            icon="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z"
+          />
+          {data.lowStockCount > 0 && (
+            <StatCard
+              label="Материали под минимум"
+              value={data.lowStockCount}
+              color="text-yellow-400"
+              tooltip="Брой материала в склада с наличност под зададения минимален праг — трябва поръчка"
+              icon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+            />
+          )}
+        </div>
+      )}
+
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Orders by status */}

@@ -389,15 +389,16 @@ export default function Orders() {
             <thead>
               <tr>
                 <th>#</th><th>Клиент</th><th>Тип</th><th>Статус</th>
-                <th>Краен срок</th><th>Цена</th><th>Създадена</th>
+                <th>Производство</th><th>Краен срок</th><th>Цена</th><th>Създадена</th>
               </tr>
             </thead>
             <tbody>
               {orders.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-12 text-muted">Няма намерени поръчки</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-muted">Няма намерени поръчки</td></tr>
               )}
               {orders.map(o => {
                 const isOverdue = o.deadline && isPast(parseISO(o.deadline)) && !['ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА'].includes(o.status)
+                const pct = o.total_stages > 0 ? Math.round((o.done_stages / o.total_stages) * 100) : null
                 return (
                   <tr key={o.id} className="cursor-pointer" onClick={() => navigate(`/orders/${o.id}`)}>
                     <td>
@@ -413,6 +414,19 @@ export default function Orders() {
                     </td>
                     <td><span className="text-xs text-muted">{o.order_type}</span></td>
                     <td><OrderStatusBadge status={o.status} /></td>
+                    <td className="min-w-[100px]">
+                      {pct !== null ? (
+                        <div title={`${o.done_stages} от ${o.total_stages} етапа`}>
+                          <div className="flex items-center gap-1.5">
+                            <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-green-500' : 'bg-accent'}`}
+                                style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-xs text-muted w-8 text-right">{o.done_stages}/{o.total_stages}</span>
+                          </div>
+                        </div>
+                      ) : <span className="text-muted">—</span>}
+                    </td>
                     <td className={isOverdue ? 'text-danger font-semibold' : 'text-muted'}>
                       {o.deadline ? format(parseISO(o.deadline), 'd MMM yyyy', { locale: bg }) : '—'}
                       {isOverdue && ' ⚠'}

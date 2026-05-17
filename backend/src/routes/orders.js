@@ -36,7 +36,9 @@ router.get('/', async (req, res) => {
              u.name AS created_by_name,
              oc.total_cost,
              CASE WHEN req.user_role IN ('admin','office') THEN o.sale_price ELSE NULL END AS sale_price,
-             (SELECT COUNT(*) FROM defects d WHERE d.order_id = o.id AND d.decision IS NULL) AS open_defects
+             (SELECT COUNT(*) FROM defects d WHERE d.order_id = o.id AND d.decision IS NULL) AS open_defects,
+             (SELECT COUNT(*)::int FROM production_stages ps WHERE ps.order_id = o.id) AS total_stages,
+             (SELECT COUNT(*)::int FROM production_stages ps WHERE ps.order_id = o.id AND ps.status = 'ГОТОВ') AS done_stages
       FROM orders o
       JOIN clients c ON c.id = o.client_id
       JOIN users u ON u.id = o.created_by

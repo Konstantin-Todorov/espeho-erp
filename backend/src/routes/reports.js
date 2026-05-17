@@ -9,7 +9,7 @@ router.use(auth, roleCheck('admin','office'));
 // GET /api/reports/dashboard
 router.get('/dashboard', async (req, res) => {
   try {
-    const [orderStats, revenueStats, defectStats, lowStock, recentOrders] = await Promise.all([
+    const [orderStats, revenueStats, prevMonthStats, defectStats, lowStock, recentOrders] = await Promise.all([
       pool.query(`
         SELECT status, COUNT(*)::int AS count
         FROM orders GROUP BY status`),
@@ -21,6 +21,13 @@ router.get('/dashboard', async (req, res) => {
           COALESCE(SUM(sale_price) FILTER (WHERE status NOT IN ('ОТКАЗАНА','ДОСТАВЕНА')), 0)::numeric(12,2) AS pipeline_value
         FROM orders o LEFT JOIN order_costs oc ON oc.order_id=o.id
         WHERE o.created_at >= DATE_TRUNC('month', NOW())`),
+      pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE status NOT IN ('ОТКАЗАНА'))::int AS total_orders,
+          COALESCE(SUM(sale_price) FILTER (WHERE status='ДОСТАВЕНА'), 0)::numeric(12,2) AS revenue_delivered
+        FROM orders o
+        WHERE o.created_at >= DATE_TRUNC('month', NOW() - INTERVAL '1 month')
+          AND o.created_at < DATE_TRUNC('month', NOW())`),
       pool.query(`
         SELECT COUNT(*)::int AS count, COALESCE(SUM(total_cost),0)::numeric(10,2) AS total_cost
         FROM defects WHERE created_at >= DATE_TRUNC('month', NOW())`),
@@ -52,6 +59,7 @@ router.get('/dashboard', async (req, res) => {
     res.json({
       orderStats: orderStats.rows,
       revenue: revenueStats.rows[0],
+      prevMonth: prevMonthStats.rows[0],
       defects: defectStats.rows[0],
       lowStockCount: lowStock.rows[0].count,
       recentOrders: recentOrders.rows,
