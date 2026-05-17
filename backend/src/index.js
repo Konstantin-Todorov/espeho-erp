@@ -33,6 +33,7 @@ app.use('/api/notifications',  require('./routes/notifications'));
 app.use('/api/quotations',     require('./routes/quotations'));
 app.use('/api/quality',        require('./routes/quality'));
 app.use('/api/deliveries',     require('./routes/deliveries'));
+app.use('/api/suppliers',      require('./routes/suppliers'));
 
 // Health check
 app.get('/api/health', (req, res) => {

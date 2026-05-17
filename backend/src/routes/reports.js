@@ -202,4 +202,94 @@ router.get('/production', async (req, res) => {
   }
 });
 
+// GET /api/reports/clients — revenue by client
+router.get('/clients', async (req, res) => {
+  const { from, to, limit = 20 } = req.query;
+  try {
+    const { rows } = await pool.query(`
+      SELECT c.id, c.name, c.phone,
+        COUNT(o.id)::int AS total_orders,
+        COUNT(o.id) FILTER (WHERE o.status NOT IN ('ОТКАЗАНА'))::int AS active_orders,
+        COUNT(o.id) FILTER (WHERE o.status='ДОСТАВЕНА')::int AS delivered_orders,
+        COUNT(o.id) FILTER (WHERE o.status='ОТКАЗАНА')::int AS cancelled_orders,
+        COALESCE(SUM(o.sale_price) FILTER (WHERE o.status='ДОСТАВЕНА'), 0)::numeric(12,2) AS total_revenue,
+        COALESCE(AVG(o.sale_price) FILTER (WHERE o.status='ДОСТАВЕНА'), 0)::numeric(12,2) AS avg_order_value,
+        MAX(o.created_at) AS last_order_at
+      FROM clients c
+      LEFT JOIN orders o ON o.client_id=c.id
+        AND ($1::date IS NULL OR o.created_at>=$1)
+        AND ($2::date IS NULL OR o.created_at<=$2)
+      GROUP BY c.id, c.name, c.phone
+      HAVING COUNT(o.id) > 0
+      ORDER BY total_revenue DESC
+      LIMIT $3`,
+      [from||null, to||null, limit]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Грешка в репорта' });
+  }
+});
+
+// GET /api/reports/order-types — breakdown by type
+router.get('/order-types', async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    const { rows } = await pool.query(`
+      SELECT o.order_type,
+        COUNT(*)::int AS total_orders,
+        COUNT(*) FILTER (WHERE o.status='ДОСТАВЕНА')::int AS delivered,
+        COUNT(*) FILTER (WHERE o.status='ОТКАЗАНА')::int AS cancelled,
+        COALESCE(SUM(o.sale_price) FILTER (WHERE o.status='ДОСТАВЕНА'),0)::numeric(12,2) AS revenue,
+        COALESCE(AVG(o.sale_price) FILTER (WHERE o.status='ДОСТАВЕНА'),0)::numeric(12,2) AS avg_price
+      FROM orders o
+      WHERE ($1::date IS NULL OR o.created_at>=$1)
+        AND ($2::date IS NULL OR o.created_at<=$2)
+      GROUP BY o.order_type ORDER BY total_orders DESC`,
+      [from||null, to||null]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Грешка в репорта' });
+  }
+});
+
+// GET /api/reports/defect-analysis — defect breakdown
+router.get('/defect-analysis', async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    const [byCause, byWorker, monthly] = await Promise.all([
+      pool.query(`
+        SELECT cause_type, COUNT(*)::int AS count,
+               COALESCE(SUM(total_cost),0)::numeric(10,2) AS total_cost
+        FROM defects
+        WHERE ($1::date IS NULL OR created_at>=$1) AND ($2::date IS NULL OR created_at<=$2)
+        GROUP BY cause_type ORDER BY count DESC`,
+        [from||null, to||null]
+      ),
+      pool.query(`
+        SELECT u.name AS worker_name, COUNT(d.id)::int AS defect_count,
+               COALESCE(SUM(d.total_cost),0)::numeric(10,2) AS total_cost
+        FROM users u LEFT JOIN defects d ON d.worker_id=u.id
+          AND ($1::date IS NULL OR d.created_at>=$1) AND ($2::date IS NULL OR d.created_at<=$2)
+        WHERE u.role='production' GROUP BY u.id, u.name ORDER BY defect_count DESC`,
+        [from||null, to||null]
+      ),
+      pool.query(`
+        SELECT DATE_TRUNC('month', created_at)::date AS month,
+               COUNT(*)::int AS count,
+               COALESCE(SUM(total_cost),0)::numeric(10,2) AS total_cost
+        FROM defects
+        WHERE ($1::date IS NULL OR created_at>=$1) AND ($2::date IS NULL OR created_at<=$2)
+        GROUP BY 1 ORDER BY 1`,
+        [from||null, to||null]
+      ),
+    ]);
+    res.json({ byCause: byCause.rows, byWorker: byWorker.rows, monthly: monthly.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Грешка в репорта' });
+  }
+});
+
 module.exports = router;

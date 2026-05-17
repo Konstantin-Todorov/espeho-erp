@@ -19,6 +19,7 @@ import Calendar from './pages/Calendar'
 import TrackOrder from './pages/TrackOrder'
 import Quotations from './pages/Quotations'
 import Deliveries from './pages/Deliveries'
+import Suppliers from './pages/Suppliers'
 import Spinner from './components/ui/Spinner'
 
 function ProtectedRoute({ children, roles }) {
@@ -47,6 +48,7 @@ function AppRoutes() {
         <Route path="warehouse" element={<ProtectedRoute roles={['admin','office','warehouse']}><Warehouse /></ProtectedRoute>} />
         <Route path="quotations" element={<ProtectedRoute roles={['admin','office']}><Quotations /></ProtectedRoute>} />
         <Route path="deliveries" element={<ProtectedRoute roles={['admin','office']}><Deliveries /></ProtectedRoute>} />
+        <Route path="suppliers" element={<ProtectedRoute roles={['admin','office','warehouse']}><Suppliers /></ProtectedRoute>} />
         <Route path="clients" element={<ProtectedRoute roles={['admin','office']}><Clients /></ProtectedRoute>} />
         <Route path="clients/:id" element={<ProtectedRoute roles={['admin','office']}><ClientDetail /></ProtectedRoute>} />
         <Route path="machines" element={<ProtectedRoute roles={['admin','production']}><Machines /></ProtectedRoute>} />

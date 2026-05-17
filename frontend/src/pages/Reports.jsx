@@ -68,11 +68,13 @@ export default function Reports() {
     setData(null)
     const params = `from=${from}&to=${to}`
     const endpoints = {
-      costs:      `/reports/costs?${params}`,
-      orders:     `/reports/orders?${params}`,
-      production: `/reports/production?${params}`,
-      materials:  `/reports/materials?${params}`,
-      defects:    `/defects/summary?${params}`,
+      costs:       `/reports/costs?${params}`,
+      orders:      `/reports/orders?${params}`,
+      production:  `/reports/production?${params}`,
+      materials:   `/reports/materials?${params}`,
+      defects:     `/defects/summary?${params}`,
+      clients:     `/reports/clients?${params}&limit=50`,
+      order_types: `/reports/order-types?${params}`,
     }
     api.get(endpoints[tab])
       .then(r => setData(r.data))
@@ -147,11 +149,13 @@ export default function Reports() {
       {/* Tabs */}
       <div className="flex border-b border-border gap-1 mb-6 overflow-x-auto">
         {[
-          { id:'costs',      label:'Финанси' },
-          { id:'orders',     label:'Поръчки' },
-          { id:'production', label:'Производство' },
-          { id:'materials',  label:'Материали' },
-          { id:'defects',    label:'Брак' },
+          { id:'costs',       label:'Финанси' },
+          { id:'orders',      label:'Поръчки' },
+          { id:'clients',     label:'По клиенти' },
+          { id:'order_types', label:'По тип' },
+          { id:'production',  label:'Производство' },
+          { id:'materials',   label:'Материали' },
+          { id:'defects',     label:'Брак' },
         ].map(t => (
           <button key={t.id} onClick={() => { setData(null); setTab(t.id) }}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap
@@ -293,6 +297,109 @@ export default function Reports() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* CLIENTS report */}
+      {!loading && tab === 'clients' && data && (
+        <div className="space-y-4">
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Клиент</th>
+                  <th>Поръчки</th>
+                  <th>Доставени</th>
+                  <th>Отказани</th>
+                  <th>Общ приход</th>
+                  <th>Ср. поръчка</th>
+                  <th>Последна поръчка</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.length === 0 && (
+                  <tr><td colSpan={7} className="text-center py-8 text-muted">Няма данни</td></tr>
+                )}
+                {data.map((c, i) => (
+                  <tr key={i}>
+                    <td>
+                      <p className="font-medium text-white">{c.name}</p>
+                      {c.phone && <p className="text-muted text-xs">{c.phone}</p>}
+                    </td>
+                    <td>{c.total_orders}</td>
+                    <td className="text-green-400">{c.delivered_orders}</td>
+                    <td className={c.cancelled_orders > 0 ? 'text-danger' : 'text-muted'}>{c.cancelled_orders}</td>
+                    <td className="font-semibold text-white">{Number(c.total_revenue).toFixed(2)} €</td>
+                    <td className="text-muted">{Number(c.avg_order_value).toFixed(2)} €</td>
+                    <td className="text-muted text-xs">
+                      {c.last_order_at ? format(parseISO(c.last_order_at), 'd MMM yy', { locale: bg }) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {data.length > 0 && (
+            <div className="card">
+              <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Топ клиенти по приход</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={data.slice(0,10)} layout="vertical" margin={{ left: 80, right: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#252a3a" />
+                  <XAxis type="number" tick={{ fill:'#6b7280', fontSize:11 }} tickFormatter={v => `${v}€`} />
+                  <YAxis type="category" dataKey="name" tick={{ fill:'#9ca3af', fontSize:11 }} width={80} />
+                  <Tooltip contentStyle={{ background:'#181c27', border:'1px solid #252a3a', borderRadius:8 }}
+                    formatter={v => [`${Number(v).toFixed(2)} €`]} />
+                  <Bar dataKey="total_revenue" name="Приход" fill="#3b82f6" radius={[0,4,4,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ORDER TYPES report */}
+      {!loading && tab === 'order_types' && data && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {data.map((t, i) => (
+              <div key={i} className="card">
+                <div className="flex items-start justify-between mb-3">
+                  <h3 className="font-semibold text-white capitalize">{t.order_type}</h3>
+                  <span className="text-2xl font-bold text-accent">{t.total_orders}</span>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted">Доставени</span>
+                    <span className="text-green-400">{t.delivered}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">Отказани</span>
+                    <span className={t.cancelled > 0 ? 'text-danger' : 'text-muted'}>{t.cancelled}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">Приход</span>
+                    <span className="text-white font-medium">{Number(t.revenue).toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted">Ср. цена</span>
+                    <span className="text-muted">{Number(t.avg_price).toFixed(2)} €</span>
+                  </div>
+                  {t.total_orders > 0 && (
+                    <div className="mt-2 pt-2 border-t border-border">
+                      <div className="flex justify-between text-xs text-muted mb-1">
+                        <span>Успех</span>
+                        <span>{Math.round(t.delivered/t.total_orders*100)}%</span>
+                      </div>
+                      <div className="w-full bg-border rounded-full h-1.5">
+                        <div className="bg-green-500 h-1.5 rounded-full"
+                          style={{ width: `${Math.round(t.delivered/t.total_orders*100)}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
