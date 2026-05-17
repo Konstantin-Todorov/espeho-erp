@@ -188,24 +188,29 @@ router.post('/stages', roleCheck('admin','office'), async (req, res) => {
 });
 
 // POST /api/production/labor — log labor time
-router.post('/labor', roleCheck('admin','production'), async (req, res) => {
-  const { order_id, stage_id, minutes, notes } = req.body;
+router.post('/labor', roleCheck('admin','office','production'), async (req, res) => {
+  const { order_id, stage_id, minutes, notes, description, worker_id: reqWorkerId } = req.body;
   if (!order_id || !minutes || minutes <= 0) {
     return res.status(400).json({ error: 'order_id и минути са задължителни' });
   }
+  // Admin/office can log on behalf of another worker; production logs for themselves
+  const isPrivileged = ['admin','office'].includes(req.user.role);
+  const workerId = (isPrivileged && reqWorkerId) ? reqWorkerId : req.user.id;
+
   const dbClient = await pool.connect();
   try {
     await dbClient.query('BEGIN');
 
     // Get worker's hourly rate
-    const userQ = await dbClient.query('SELECT hourly_rate FROM users WHERE id=$1', [req.user.id]);
+    const userQ = await dbClient.query('SELECT hourly_rate FROM users WHERE id=$1', [workerId]);
     const hourlyRate = userQ.rows[0]?.hourly_rate || 0;
     const laborCost = (minutes / 60) * hourlyRate;
+    const combinedNotes = [description, notes].filter(Boolean).join(' · ') || null;
 
     const { rows } = await dbClient.query(
       `INSERT INTO labor_logs (order_id, stage_id, worker_id, minutes, hourly_rate, notes)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [order_id, stage_id, req.user.id, minutes, hourlyRate, notes]
+      [order_id, stage_id || null, workerId, minutes, hourlyRate, combinedNotes]
     );
 
     // Update order cost card

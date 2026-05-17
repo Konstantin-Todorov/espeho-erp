@@ -68,46 +68,96 @@ function CostCard({ costs, salePrice, isAdmin }) {
 }
 
 // ─── Log Labor Modal ──────────────────────────────────────────────────────────
-function LogLaborModal({ open, onClose, orderId, stages, onLogged }) {
-  const [form, setForm] = useState({ stage_id: '', minutes: '', notes: '' })
+function LogLaborModal({ open, onClose, orderId, stages, workers, currentUser, onLogged }) {
+  const isPrivileged = ['admin','office'].includes(currentUser?.role)
+  const [form, setForm] = useState({ worker_id: '', stage_id: '', minutes: '', description: '', notes: '' })
   const [loading, setLoading] = useState(false)
+
+  const reset = () => setForm({ worker_id: '', stage_id: '', minutes: '', description: '', notes: '' })
 
   const handleSubmit = async e => {
     e.preventDefault()
     setLoading(true)
     try {
-      await api.post('/production/labor', { order_id: orderId, ...form, minutes: +form.minutes })
-      toast.success('Трудът е записан')
+      await api.post('/production/labor', {
+        order_id: orderId,
+        stage_id: form.stage_id || null,
+        minutes: +form.minutes,
+        description: form.description || null,
+        notes: form.notes || null,
+        worker_id: isPrivileged && form.worker_id ? form.worker_id : undefined,
+      })
+      toast.success('Работата е записана')
       onLogged()
       onClose()
-      setForm({ stage_id: '', minutes: '', notes: '' })
+      reset()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Грешка')
     } finally { setLoading(false) }
   }
 
+  const minutePresets = [30, 60, 90, 120, 180, 240]
+
   return (
-    <Modal open={open} onClose={onClose} title="Запиши отработено време" size="sm">
+    <Modal open={open} onClose={onClose} title="Запиши извършена работа" size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {isPrivileged && workers.length > 0 && (
+          <div>
+            <label className="label">Работник *</label>
+            <select className="select" value={form.worker_id} onChange={e=>setForm(f=>({...f,worker_id:e.target.value}))} required>
+              <option value="">— Изберете работник</option>
+              {workers.map(w => <option key={w.id} value={w.id}>{w.name} {w.role_label ? `(${w.role_label})` : ''}</option>)}
+            </select>
+          </div>
+        )}
+        {!isPrivileged && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-accent/10 text-sm text-accent">
+            <span>👷</span>
+            <span>Записва се за: <strong>{currentUser?.name}</strong></span>
+          </div>
+        )}
         <div>
           <label className="label">Производствен етап</label>
           <select className="select" value={form.stage_id} onChange={e=>setForm(f=>({...f,stage_id:e.target.value}))}>
-            <option value="">-- Без етап --</option>
-            {stages.map(s => <option key={s.id} value={s.id}>{s.stage_name}</option>)}
+            <option value="">— Общо за поръчката (без конкретен етап)</option>
+            {stages.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.status === 'ГОТОВ' ? '✓ ' : s.status === 'В_ПРОЦЕС' ? '⚡ ' : ''}{s.stage_name}
+              </option>
+            ))}
           </select>
         </div>
         <div>
-          <label className="label">Минути *</label>
-          <input type="number" className="input" min="1" placeholder="60" value={form.minutes}
-            onChange={e=>setForm(f=>({...f,minutes:e.target.value}))} required />
+          <label className="label">Извършена работа</label>
+          <input className="input" placeholder="Какво беше направено (напр. рязане 4 листа 6мм)…"
+            value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} />
         </div>
         <div>
-          <label className="label">Бележка</label>
-          <input className="input" value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} />
+          <label className="label">Продължителност (минути) *</label>
+          <input type="number" className="input" min="1" max="960" placeholder="60"
+            value={form.minutes} onChange={e=>setForm(f=>({...f,minutes:e.target.value}))} required />
+          <div className="flex gap-1.5 mt-2 flex-wrap">
+            {minutePresets.map(m => (
+              <button key={m} type="button"
+                onClick={() => setForm(f=>({...f,minutes:String(m)}))}
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                  form.minutes === String(m) ? 'bg-accent text-white border-accent' : 'border-border text-muted hover:text-white hover:border-accent/50'
+                }`}>
+                {m >= 60 ? `${m/60}ч` : `${m}м`}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex gap-3 justify-end">
-          <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
-          <button type="submit" className="btn-primary" disabled={loading}>Запиши</button>
+        <div>
+          <label className="label">Допълнителна бележка</label>
+          <input className="input" placeholder="Незадължително…"
+            value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} />
+        </div>
+        <div className="flex gap-3 justify-end pt-1">
+          <button type="button" className="btn-secondary" onClick={() => { onClose(); reset() }}>Откажи</button>
+          <button type="submit" className="btn-primary" disabled={loading || !form.minutes}>
+            {loading ? 'Записва...' : '✓ Запиши работата'}
+          </button>
         </div>
       </form>
     </Modal>
@@ -309,9 +359,7 @@ export default function OrderDetail() {
   useEffect(() => {
     fetchOrder()
     fetchComments()
-    if (isAdmin || user?.role === 'office') {
-      api.get('/production/workers').then(r => setWorkers(r.data)).catch(() => {})
-    }
+    api.get('/production/workers').then(r => setWorkers(r.data)).catch(() => {})
   }, [id])
 
   const sendComment = async () => {
@@ -395,9 +443,9 @@ export default function OrderDetail() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {isProduction && order.status === 'ПРОИЗВОДСТВО' && (
+          {(isProduction || isAdmin || user?.role === 'office') && order.status === 'ПРОИЗВОДСТВО' && (
             <button className="btn-primary" onClick={() => setLaborOpen(true)}>
-              + Запиши труд
+              + Запиши работа
             </button>
           )}
           {nextStatuses.map(s => {
@@ -721,7 +769,7 @@ export default function OrderDetail() {
       </div>
 
       <LogLaborModal open={laborOpen} onClose={() => setLaborOpen(false)}
-        orderId={id} stages={order.stages} onLogged={fetchOrder} />
+        orderId={id} stages={order.stages} workers={workers} currentUser={user} onLogged={fetchOrder} />
     </div>
   )
 }
