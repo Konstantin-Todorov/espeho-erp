@@ -439,7 +439,7 @@ export default function OrderDetail() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Link to="/orders" className="text-muted hover:text-white text-sm">← Поръчки</Link>
@@ -454,7 +454,7 @@ export default function OrderDetail() {
             {order.client_name} · {order.order_type} · Създадена от {order.created_by_name}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap sm:flex-nowrap overflow-x-auto">
           {(isAdmin || user?.role === 'office') && (
             <button className="btn-secondary" title="Клонирай поръчката"
               onClick={async () => {

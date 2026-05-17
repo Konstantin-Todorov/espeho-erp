@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { StageStatusBadge, UrgentBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
+import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import { format, parseISO, isPast } from 'date-fns'
 import { bg } from 'date-fns/locale'
@@ -86,11 +87,11 @@ function BoardCard({ order, onUpdate }) {
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               {stage.status === 'ЧАКАЩ' && (
-                <button className="px-2 py-0.5 rounded bg-border text-muted hover:bg-accent/20 hover:text-accent text-xs transition-colors"
+                <button className="px-3 py-1 rounded-lg bg-border text-muted hover:bg-accent/20 hover:text-accent text-xs transition-colors min-h-[28px]"
                   onClick={e => handleStageUpdate(e, stage.id, 'В_ПРОЦЕС')}>Започни</button>
               )}
               {stage.status === 'В_ПРОЦЕС' && (
-                <button className="px-2 py-0.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 text-xs transition-colors"
+                <button className="px-3 py-1 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 font-medium text-xs transition-colors min-h-[28px]"
                   onClick={e => handleStageUpdate(e, stage.id, 'ГОТОВ')}>✓ Готово</button>
               )}
             </div>
@@ -109,18 +110,26 @@ function BoardCard({ order, onUpdate }) {
 
 export default function Production() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [board, setBoard] = useState([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('board') // 'board' | 'list'
+  const [lastRefresh, setLastRefresh] = useState(new Date())
 
   const fetchBoard = async () => {
     try {
       const { data } = await api.get('/production/board')
       setBoard(data)
+      setLastRefresh(new Date())
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchBoard() }, [])
+  useEffect(() => {
+    fetchBoard()
+    // Auto-refresh every 2 minutes for production floor
+    const interval = setInterval(fetchBoard, 120_000)
+    return () => clearInterval(interval)
+  }, [])
 
   if (loading) return <PageLoader />
 
@@ -148,9 +157,54 @@ export default function Production() {
           <button className={`btn ${view==='list' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setView('list')}>
             Списък
           </button>
-          <button className="btn-secondary" onClick={fetchBoard}>↻ Обнови</button>
+          <button className="btn-secondary" onClick={fetchBoard} title={`Последно обновяване: ${format(lastRefresh, 'HH:mm')}`}>
+            ↻ <span className="hidden sm:inline">Обнови</span>
+          </button>
         </div>
       </div>
+
+      {/* My assignments — shown for production workers */}
+      {user?.role === 'production' && (() => {
+        const myStages = board.flatMap(o =>
+          (o.stages || [])
+            .filter(s => s.assigned_to === user.id && s.status !== 'ГОТОВ')
+            .map(s => ({ ...s, order_number: o.order_number, order_id: o.id, client_name: o.client_name }))
+        )
+        if (myStages.length === 0) return null
+        return (
+          <div className="mb-6 card border-accent/30 bg-accent/5">
+            <h2 className="text-sm font-semibold text-accent uppercase tracking-wide mb-3">👤 Моите задачи</h2>
+            <div className="space-y-2">
+              {myStages.map(s => (
+                <div key={s.id} className="flex items-center justify-between gap-3 py-2 px-3 bg-bg rounded-xl border border-border">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium text-sm">{s.stage_name}</p>
+                    <p className="text-xs text-muted">#{s.order_number} · {s.client_name}</p>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    {s.status === 'ЧАКАЩ' && (
+                      <button className="btn-secondary text-xs py-1.5 px-3 min-h-[36px]"
+                        onClick={async () => {
+                          await api.patch(`/production/stages/${s.id}`, { status: 'В_ПРОЦЕС' })
+                          toast.success('Започнато'); fetchBoard()
+                        }}>Започни</button>
+                    )}
+                    {s.status === 'В_ПРОЦЕС' && (
+                      <button className="btn-primary text-xs py-1.5 px-3 min-h-[36px]"
+                        onClick={async () => {
+                          await api.patch(`/production/stages/${s.id}`, { status: 'ГОТОВ' })
+                          toast.success('Завършено ✓'); fetchBoard()
+                        }}>✓ Готово</button>
+                    )}
+                    <button className="btn-ghost text-xs py-1.5 px-2 min-h-[36px]"
+                      onClick={() => navigate(`/orders/${s.order_id}`)}>→</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {view === 'board' ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
