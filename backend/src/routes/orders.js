@@ -140,8 +140,9 @@ router.post('/', roleCheck('admin','office'), async (req, res) => {
       `INSERT INTO orders (client_id, order_type, deadline, is_urgent, sale_price, notes,
                            delivery_address, source, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [client_id, order_type, deadline, is_urgent || false, sale_price, notes,
-       delivery_address, source || 'office', req.user.id]
+      [client_id, order_type, deadline || null, is_urgent || false,
+       sale_price !== '' ? +sale_price : null, notes || null,
+       delivery_address || null, source || 'office', req.user.id]
     );
     const order = orderRes.rows[0];
 
@@ -152,8 +153,12 @@ router.post('/', roleCheck('admin','office'), async (req, res) => {
         await client.query(
           `INSERT INTO order_items (order_id, product_type, product_desc, width, height, qty, unit_price, notes, sort_order)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [order.id, it.product_type || order_type, it.product_desc, it.width, it.height,
-           it.qty || 1, it.unit_price, it.notes, i]
+          [order.id, it.product_type || order_type, it.product_desc,
+           it.width !== '' ? +it.width : null,
+           it.height !== '' ? +it.height : null,
+           it.qty || 1,
+           it.unit_price !== '' ? +it.unit_price : null,
+           it.notes || null, i]
         );
       }
     }

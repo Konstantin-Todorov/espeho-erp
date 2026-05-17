@@ -9,7 +9,7 @@ import { bg } from 'date-fns/locale'
 
 const STAGE_COLUMNS = ['Рязане','Миене','Сглобяване','Заливане','Шлайфане','Кантиране']
 
-function KanbanCard({ order, onUpdate }) {
+function BoardCard({ order, onUpdate }) {
   const isOverdue = order.deadline && isPast(parseISO(order.deadline))
   const activeStage = order.stages?.find(s => s.status === 'В_ПРОЦЕС') || order.stages?.find(s => s.status === 'ЧАКАЩ')
 
@@ -77,7 +77,7 @@ function KanbanCard({ order, onUpdate }) {
 export default function Production() {
   const [board, setBoard] = useState([])
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState('kanban') // 'kanban' | 'list'
+  const [view, setView] = useState('board') // 'board' | 'list'
 
   const fetchBoard = async () => {
     try {
@@ -108,8 +108,8 @@ export default function Production() {
           <p className="text-sm text-muted mt-0.5">{board.length} активни поръчки</p>
         </div>
         <div className="flex gap-2">
-          <button className={`btn ${view==='kanban' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setView('kanban')}>
-            Канбан
+          <button className={`btn ${view==='board' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setView('board')}>
+            Табло
           </button>
           <button className={`btn ${view==='list' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setView('list')}>
             Списък
@@ -118,7 +118,7 @@ export default function Production() {
         </div>
       </div>
 
-      {view === 'kanban' ? (
+      {view === 'board' ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
           {Object.entries(byStatus).map(([status, orders]) => (
             <div key={status}>
@@ -129,7 +129,7 @@ export default function Production() {
               {orders.length === 0 ? (
                 <div className="card text-center py-8 text-muted text-sm">Няма поръчки</div>
               ) : orders.map(order => (
-                <KanbanCard key={order.id} order={order} onUpdate={fetchBoard} />
+                <BoardCard key={order.id} order={order} onUpdate={fetchBoard} />
               ))}
             </div>
           ))}

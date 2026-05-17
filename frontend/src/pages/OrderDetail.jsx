@@ -5,9 +5,12 @@ import { useAuth } from '../context/AuthContext'
 import { OrderStatusBadge, StageStatusBadge, UrgentBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
 import Modal, { ConfirmDialog } from '../components/ui/Modal'
+import CreatableInput from '../components/ui/CreatableInput'
 import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
+
+const COMMON_STAGES = ['Рязане','Миене','Шлайфане','Сглобяване','Заливане','Кантиране','Темпериране','Ламиниране','Контрол качество','Опаковане']
 
 const STATUS_FLOW = {
   'НОВА':['МАТЕРИАЛИ','ОТКАЗАНА'],
@@ -223,6 +226,51 @@ function Timeline({ order }) {
   )
 }
 
+// ─── Add Stage Inline ─────────────────────────────────────────────────────────
+function AddStageInline({ orderId, onAdded }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    try {
+      await api.post('/production/stages', { order_id: orderId, stage_name: name.trim() })
+      toast.success('Етапът е добавен')
+      setName(''); setOpen(false)
+      onAdded()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Грешка')
+    } finally { setSaving(false) }
+  }
+
+  if (!open) return (
+    <button onClick={() => setOpen(true)}
+      className="w-full border border-dashed border-border text-muted hover:text-white hover:border-accent/50 rounded-xl py-2 text-sm transition-colors">
+      + Добави производствен етап
+    </button>
+  )
+
+  return (
+    <div className="card border-accent/30 flex items-center gap-2">
+      <CreatableInput
+        value={name}
+        onChange={setName}
+        suggestions={COMMON_STAGES}
+        placeholder="Напиши или избери етап..."
+        className="flex-1"
+      />
+      <button className="btn-primary py-1.5 text-sm" onClick={handleSave} disabled={saving || !name.trim()}>
+        {saving ? '...' : 'Добави'}
+      </button>
+      <button className="btn-secondary py-1.5 text-sm" onClick={() => { setOpen(false); setName('') }}>
+        Откажи
+      </button>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function OrderDetail() {
   const { id } = useParams()
@@ -357,6 +405,9 @@ export default function OrderDetail() {
           {/* Stages tab */}
           {activeTab === 'stages' && (
             <div className="space-y-2">
+              {(isAdmin || order.status === 'ПРОИЗВОДСТВО') && (
+                <AddStageInline orderId={order.id} onAdded={fetchOrder} />
+              )}
               {order.stages.map((stage, i) => (
                 <div key={stage.id} className={`card flex items-center justify-between gap-4
                   ${stage.status === 'В_ПРОЦЕС' ? 'border-orange-500/40' : ''}

@@ -148,6 +148,30 @@ router.patch('/stages/:id', roleCheck('admin','production'), async (req, res) =>
   }
 });
 
+// POST /api/production/stages — add a stage to an existing order
+router.post('/stages', roleCheck('admin','office'), async (req, res) => {
+  const { order_id, stage_name, notes } = req.body;
+  if (!order_id || !stage_name?.trim()) {
+    return res.status(400).json({ error: 'order_id и stage_name са задължителни' });
+  }
+  try {
+    const maxOrder = await pool.query(
+      'SELECT COALESCE(MAX(stage_order),0) AS max FROM production_stages WHERE order_id=$1',
+      [order_id]
+    );
+    const nextOrder = maxOrder.rows[0].max + 1;
+    const { rows } = await pool.query(
+      `INSERT INTO production_stages (order_id, stage_name, stage_order, status, notes)
+       VALUES ($1, $2, $3, 'ЧАКАЩ', $4) RETURNING *`,
+      [order_id, stage_name.trim(), nextOrder, notes || null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Грешка при добавяне на етап' });
+  }
+});
+
 // POST /api/production/labor — log labor time
 router.post('/labor', roleCheck('admin','production'), async (req, res) => {
   const { order_id, stage_id, minutes, notes } = req.body;

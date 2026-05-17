@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import CreatableInput from '../components/ui/CreatableInput'
 import { Link, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
@@ -71,9 +72,13 @@ function CreateDefectModal({ open, onClose, onCreated, prefillOrderId }) {
           </div>
           <div>
             <label className="label">Причина *</label>
-            <select className="select" value={form.cause_type} onChange={e=>setForm(f=>({...f,cause_type:e.target.value}))} required>
-              {CAUSE_OPTIONS.map(c => <option key={c} value={c}>{CAUSE_LABELS[c]}</option>)}
-            </select>
+            <CreatableInput
+              value={form.cause_type}
+              onChange={val => setForm(f => ({ ...f, cause_type: val }))}
+              suggestions={CAUSE_OPTIONS.map(c => ({ value: c, label: CAUSE_LABELS[c] }))}
+              placeholder="Изберете или напишете причина..."
+              required
+            />
           </div>
           <div>
             <label className="label">Машина</label>

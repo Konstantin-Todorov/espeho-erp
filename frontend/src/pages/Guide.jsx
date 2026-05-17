@@ -184,7 +184,7 @@ export default function Guide() {
           <div>
             <p className="font-semibold text-orange-400 mb-1">Производство — Drag & Drop</p>
             <p className="text-sm text-gray-400">
-              В модул <strong className="text-white">Производство</strong> поръчките са наредени в Kanban дъска с колони по статус.
+              В модул <strong className="text-white">Производство</strong> поръчките са наредени в Производствено табло с колони по статус.
               Производствените работници и офисът могат да преместват поръчки между колоните с влачене —
               от <em>Чакащи</em> → <em>В процес</em> → <em>Готово</em>.
               Всяко преместване се записва автоматично.

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { OrderStatusBadge, UrgentBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
+import CreatableInput from '../components/ui/CreatableInput'
 import toast from 'react-hot-toast'
 import { format, parseISO, isPast } from 'date-fns'
 import { bg } from 'date-fns/locale'
@@ -218,10 +219,13 @@ function CreateOrderModal({ open, onClose, onCreated }) {
 
           <div>
             <label className="label">Тип поръчка *</label>
-            <select className="select" value={form.order_type}
-              onChange={e => setForm(f => ({ ...f, order_type: e.target.value }))}>
-              {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <CreatableInput
+              value={form.order_type}
+              onChange={val => setForm(f => ({ ...f, order_type: val }))}
+              suggestions={TYPE_OPTIONS}
+              placeholder="стъклопакет, единично стъкло..."
+              required
+            />
           </div>
           <div>
             <label className="label">Краен срок</label>
