@@ -23,6 +23,7 @@ router.get('/', async (req, res) => {
     const { rows } = await pool.query(`
       SELECT q.id, q.quote_number, q.status, q.valid_until, q.total_price,
              q.created_at, q.updated_at, q.converted_to,
+             jsonb_array_length(q.items) AS items_count,
              c.name AS client_name, c.phone AS client_phone,
              u.name AS created_by_name
       FROM quotations q

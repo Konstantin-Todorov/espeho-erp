@@ -845,6 +845,51 @@ export default function OrderDetail() {
             </div>
           </div>
 
+          {/* Deliveries */}
+          {(isAdmin || user?.role === 'office') && order.status === 'ГОТОВА' && deliveries.length === 0 && (
+            <div className="card border-green-500/20">
+              <p className="text-muted text-xs uppercase tracking-wide mb-2">Готова за доставка</p>
+              <button className="btn-primary w-full text-sm py-2"
+                onClick={async () => {
+                  try {
+                    await api.post('/deliveries', {
+                      order_id: order.id,
+                      address: order.delivery_address || '',
+                    })
+                    toast.success('Доставката е планирана')
+                    fetchDeliveries()
+                  } catch (err) { toast.error(err.response?.data?.error || 'Грешка') }
+                }}>
+                🚚 Планирай доставка
+              </button>
+            </div>
+          )}
+          {deliveries.length > 0 && (
+            <div className="card text-sm">
+              <p className="text-muted text-xs uppercase tracking-wide mb-2">Доставки</p>
+              <div className="space-y-2">
+                {deliveries.map(d => (
+                  <div key={d.id} className="flex items-center justify-between">
+                    <div>
+                      <span className={`badge text-xs ${
+                        d.status === 'DELIVERED' ? 'bg-green-500/20 text-green-400' :
+                        d.status === 'IN_TRANSIT' ? 'bg-orange-500/20 text-orange-400' :
+                        'bg-blue-500/20 text-blue-400'}`}>
+                        {d.status === 'DELIVERED' ? '✓ Доставена' : d.status === 'IN_TRANSIT' ? '🚚 В движение' : '📋 Планирана'}
+                      </span>
+                      {d.scheduled_date && (
+                        <p className="text-xs text-muted mt-0.5">
+                          {format(parseISO(d.scheduled_date), 'd MMM yyyy', { locale: bg })}
+                        </p>
+                      )}
+                    </div>
+                    {d.driver_name && <span className="text-xs text-muted">{d.driver_name}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Client tracking link */}
           {order.tracking_token && (isAdmin || user?.role === 'office') && (
             <div className="card text-sm">
