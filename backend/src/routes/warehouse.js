@@ -224,6 +224,40 @@ router.post('/materials', roleCheck('admin','warehouse'), async (req, res) => {
   }
 });
 
+// PATCH /api/warehouse/materials/:id — update material
+router.patch('/materials/:id', roleCheck('admin','warehouse'), async (req, res) => {
+  const { name, code, category, unit, price_per_unit, description, active } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE materials SET name=COALESCE($1,name), code=COALESCE($2,code),
+       category=COALESCE($3::material_category,category), unit=COALESCE($4,unit),
+       price_per_unit=COALESCE($5,price_per_unit), description=COALESCE($6,description),
+       active=COALESCE($7,active), updated_at=NOW() WHERE id=$8 RETURNING *`,
+      [name, code, category, unit, price_per_unit, description, active, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Не е намерен' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Грешка при обновяване на материала' });
+  }
+});
+
+// DELETE /api/warehouse/materials/:id — soft delete (set active=false)
+router.delete('/materials/:id', roleCheck('admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE materials SET active=false, updated_at=NOW() WHERE id=$1 RETURNING id`,
+      [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Не е намерен' });
+    res.json({ message: 'Материалът е деактивиран' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Грешка при изтриване' });
+  }
+});
+
 // PATCH /api/warehouse/stock/:materialId/:locationId — update threshold
 router.patch('/stock/:materialId/:locationId', roleCheck('admin','warehouse'), async (req, res) => {
   const { min_threshold } = req.body;

@@ -17,6 +17,7 @@ const STATUS_FLOW = {
   'ДОСТАВЕНА':[],'ОТКАЗАНА':[],
 }
 
+// ─── Cost Card ────────────────────────────────────────────────────────────────
 function CostCard({ costs, salePrice, isAdmin }) {
   if (!costs) return null
   const margin = salePrice ? salePrice - costs.total_cost : null
@@ -63,6 +64,7 @@ function CostCard({ costs, salePrice, isAdmin }) {
   )
 }
 
+// ─── Log Labor Modal ──────────────────────────────────────────────────────────
 function LogLaborModal({ open, onClose, orderId, stages, onLogged }) {
   const [form, setForm] = useState({ stage_id: '', minutes: '', notes: '' })
   const [loading, setLoading] = useState(false)
@@ -109,6 +111,119 @@ function LogLaborModal({ open, onClose, orderId, stages, onLogged }) {
   )
 }
 
+// ─── Timeline ─────────────────────────────────────────────────────────────────
+const TIMELINE_ICONS = {
+  created:   { icon: '📋', color: 'bg-accent/20 text-accent border-accent/30' },
+  stage:     { icon: '⚙', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+  stage_done:{ icon: '✓', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
+  labor:     { icon: '👷', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+  defect:    { icon: '⚠', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+  file:      { icon: '📎', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  status:    { icon: '🔄', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
+}
+
+function buildTimeline(order) {
+  const events = []
+
+  // Created
+  events.push({
+    type: 'created',
+    at: order.created_at,
+    label: `Поръчката е създадена от ${order.created_by_name}`,
+    sub: `Статус: НОВА · ${order.order_type}`,
+  })
+
+  // Stages
+  order.stages?.forEach(s => {
+    if (s.started_at) {
+      events.push({
+        type: 'stage',
+        at: s.started_at,
+        label: `Етап "${s.stage_name}" е започнат`,
+        sub: s.worker_name || '',
+      })
+    }
+    if (s.completed_at) {
+      events.push({
+        type: 'stage_done',
+        at: s.completed_at,
+        label: `Етап "${s.stage_name}" е завършен`,
+        sub: s.worker_name || '',
+      })
+    }
+  })
+
+  // Labor entries
+  order.labor?.forEach(l => {
+    events.push({
+      type: 'labor',
+      at: l.logged_at,
+      label: `Труд записан: ${l.minutes} мин`,
+      sub: `${l.worker_name}${l.stage_name ? ` · ${l.stage_name}` : ''}${l.notes ? ` · ${l.notes}` : ''}`,
+    })
+  })
+
+  // Defects
+  order.defects?.forEach(d => {
+    events.push({
+      type: 'defect',
+      at: d.created_at,
+      label: `Брак: ${d.cause_type.replace('_', ' ')}`,
+      sub: `${d.worker_name}${d.cause_notes ? ` · ${d.cause_notes}` : ''}`,
+    })
+  })
+
+  // Files
+  order.files?.forEach(f => {
+    events.push({
+      type: 'file',
+      at: f.created_at,
+      label: `Файл прикачен: ${f.original_name}`,
+      sub: f.uploaded_by_name || '',
+    })
+  })
+
+  // Sort chronologically
+  return events.sort((a, b) => new Date(a.at) - new Date(b.at))
+}
+
+function Timeline({ order }) {
+  const events = buildTimeline(order)
+
+  if (events.length === 0) {
+    return <div className="card text-center py-8 text-muted">Няма история</div>
+  }
+
+  return (
+    <div className="space-y-0">
+      {events.map((ev, i) => {
+        const { icon, color } = TIMELINE_ICONS[ev.type] || TIMELINE_ICONS.status
+        const isLast = i === events.length - 1
+        return (
+          <div key={i} className="flex gap-4">
+            {/* Icon + line */}
+            <div className="flex flex-col items-center flex-shrink-0">
+              <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-sm flex-shrink-0 ${color}`}>
+                {icon}
+              </div>
+              {!isLast && <div className="w-px flex-1 bg-border my-1" />}
+            </div>
+            {/* Content */}
+            <div className={`pb-4 ${isLast ? '' : ''}`}>
+              <p className="text-white text-sm font-medium">{ev.label}</p>
+              {ev.sub && <p className="text-muted text-xs">{ev.sub}</p>}
+              <p className="text-muted text-xs mt-0.5">
+                {format(parseISO(ev.at), 'd MMM yyyy · HH:mm', { locale: bg })}
+              </p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -143,7 +258,7 @@ export default function OrderDetail() {
   const updateStage = async (stageId, status) => {
     try {
       await api.patch(`/production/stages/${stageId}`, { status })
-      toast.success(`Етапът е обновен`)
+      toast.success('Етапът е обновен')
       fetchOrder()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Грешка')
@@ -155,6 +270,15 @@ export default function OrderDetail() {
 
   const nextStatuses = STATUS_FLOW[order.status] || []
   const isOverdue = order.deadline && new Date(order.deadline) < new Date() && !['ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА'].includes(order.status)
+
+  const TABS = [
+    { id: 'stages',   label: 'Производство' },
+    { id: 'items',    label: 'Артикули' },
+    { id: 'defects',  label: 'Брак', badge: order.defects?.length },
+    { id: 'labor',    label: 'Труд' },
+    { id: 'files',    label: 'Файлове' },
+    { id: 'history',  label: 'История' },
+  ]
 
   return (
     <div>
@@ -217,14 +341,14 @@ export default function OrderDetail() {
           </div>
 
           {/* Tabs */}
-          <div className="flex border-b border-border gap-1">
-            {['stages','items','defects','labor','files'].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px
-                  ${activeTab===tab ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-white'}`}>
-                {{ stages:'Производство', items:'Артикули', defects:'Брак', labor:'Труд', files:'Файлове' }[tab]}
-                {tab === 'defects' && order.defects?.length > 0 && (
-                  <span className="ml-1 badge bg-red-500/20 text-red-400 text-xs">{order.defects.length}</span>
+          <div className="flex border-b border-border gap-1 overflow-x-auto">
+            {TABS.map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap
+                  ${activeTab === tab.id ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-white'}`}>
+                {tab.label}
+                {tab.badge > 0 && (
+                  <span className="ml-1 badge bg-red-500/20 text-red-400 text-xs">{tab.badge}</span>
                 )}
               </button>
             ))}
@@ -280,7 +404,11 @@ export default function OrderDetail() {
             <div className="table-container">
               <table>
                 <thead>
-                  <tr><th>Описание</th><th>Размер</th><th>Бр</th>{(isAdmin) && <th>Ед. цена</th>}{isAdmin && <th>Сума</th>}</tr>
+                  <tr>
+                    <th>Описание</th><th>Размер</th><th>Бр</th>
+                    {isAdmin && <th>Ед. цена</th>}
+                    {isAdmin && <th>Сума</th>}
+                  </tr>
                 </thead>
                 <tbody>
                   {order.items.map(item => (
@@ -373,13 +501,15 @@ export default function OrderDetail() {
               ))}
             </div>
           )}
+
+          {/* History / Timeline tab */}
+          {activeTab === 'history' && <Timeline order={order} />}
         </div>
 
         {/* Right column */}
         <div className="space-y-4">
           {isAdmin && <CostCard costs={order.costs} salePrice={order.sale_price} isAdmin={isAdmin} />}
 
-          {/* Quick info */}
           <div className="card text-sm space-y-2">
             <p className="text-muted text-xs uppercase tracking-wide">Информация</p>
             <div className="flex justify-between">

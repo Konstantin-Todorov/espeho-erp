@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
@@ -12,7 +12,115 @@ import { bg } from 'date-fns/locale'
 const STATUS_OPTIONS = ['НОВА','МАТЕРИАЛИ','ПРОИЗВОДСТВО','ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА']
 const TYPE_OPTIONS   = ['стъклопакет','единично_стъкло','смесена']
 const SOURCE_OPTIONS = ['phone','email','office','website','referral','other']
+const SOURCE_LABELS  = { phone:'Телефон', email:'Email', office:'Офис', website:'Уебсайт', referral:'Препоръка', other:'Друго' }
 
+// ─── Quick-create client inline form ─────────────────────────────────────────
+function QuickClientForm({ onCreated, onCancel }) {
+  const [form, setForm] = useState({ name: '', phone: '', city: '' })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async e => {
+    e.preventDefault()
+    if (!form.name) return toast.error('Наименованието е задължително')
+    setLoading(true)
+    try {
+      const { data } = await api.post('/clients', { ...form, source: 'office' })
+      toast.success('Клиентът е създаден')
+      onCreated(data)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Грешка')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="mt-2 p-3 bg-bg border border-accent/30 rounded-xl space-y-2">
+      <p className="text-xs font-semibold text-accent">Нов клиент</p>
+      <form onSubmit={handleSubmit} className="space-y-2">
+        <input className="input text-sm" placeholder="Наименование *" value={form.name}
+          onChange={e => setForm(f => ({ ...f, name: e.target.value }))} autoFocus required />
+        <div className="grid grid-cols-2 gap-2">
+          <input className="input text-sm" placeholder="Телефон" value={form.phone}
+            onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+          <input className="input text-sm" placeholder="Град" value={form.city}
+            onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
+        </div>
+        <div className="flex gap-2 justify-end">
+          <button type="button" className="btn-secondary text-xs py-1" onClick={onCancel}>Откажи</button>
+          <button type="submit" className="btn-primary text-xs py-1" disabled={loading}>
+            {loading ? '...' : 'Създай'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+// ─── Product catalog picker ───────────────────────────────────────────────────
+function CatalogPicker({ orderType, onSelect, onClose }) {
+  const [templates, setTemplates] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('')
+  const ref = useRef(null)
+
+  useEffect(() => {
+    api.get('/products').then(r => setTemplates(r.data)).finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const handleClick = e => {
+      if (ref.current && !ref.current.contains(e.target)) onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [onClose])
+
+  const filtered = templates.filter(t => {
+    if (filter && !t.name.toLowerCase().includes(filter.toLowerCase()) && !t.default_description?.toLowerCase().includes(filter.toLowerCase())) return false
+    return true
+  })
+
+  // Grouped by order_type
+  const groups = filtered.reduce((acc, t) => {
+    if (!acc[t.order_type]) acc[t.order_type] = []
+    acc[t.order_type].push(t)
+    return acc
+  }, {})
+
+  return (
+    <div ref={ref} className="absolute z-40 top-full mt-1 left-0 right-0 bg-surface border border-border rounded-xl shadow-2xl">
+      <div className="p-2 border-b border-border">
+        <input className="input text-sm w-full" placeholder="Търси шаблон..." value={filter}
+          onChange={e => setFilter(e.target.value)} autoFocus />
+      </div>
+      <div className="max-h-64 overflow-y-auto">
+        {loading && <p className="text-center text-muted text-sm py-4">Зареждане...</p>}
+        {!loading && filtered.length === 0 && <p className="text-center text-muted text-sm py-4">Няма намерени шаблони</p>}
+        {Object.entries(groups).map(([type, items]) => (
+          <div key={type}>
+            <p className="px-3 py-1.5 text-xs font-semibold text-muted uppercase tracking-wide bg-bg/50">{type}</p>
+            {items.map(t => (
+              <button key={t.id} type="button"
+                className="w-full text-left px-3 py-2 hover:bg-border transition-colors flex justify-between items-center gap-2"
+                onClick={() => { onSelect(t); onClose() }}>
+                <div>
+                  <p className="text-sm font-medium text-white">{t.name}</p>
+                  {t.default_description && <p className="text-xs text-muted">{t.default_description}</p>}
+                </div>
+                {t.unit_price && (
+                  <span className="text-accent text-sm font-medium flex-shrink-0">{Number(t.unit_price).toFixed(2)} лв</span>
+                )}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Create Order Modal ───────────────────────────────────────────────────────
 function CreateOrderModal({ open, onClose, onCreated }) {
   const [clients, setClients] = useState([])
   const [form, setForm] = useState({
@@ -21,17 +129,45 @@ function CreateOrderModal({ open, onClose, onCreated }) {
     items:[{ product_desc:'', product_type:'стъклопакет', width:'', height:'', qty:1, unit_price:'' }]
   })
   const [loading, setLoading] = useState(false)
+  const [showQuickClient, setShowQuickClient] = useState(false)
+  const [catalogOpenIdx, setCatalogOpenIdx] = useState(null)
   const { isAdmin } = useAuth()
 
   useEffect(() => {
     if (open) api.get('/clients?limit=200').then(r => setClients(r.data.data))
   }, [open])
 
-  const addItem = () => setForm(f => ({ ...f, items:[...f.items, { product_desc:'', product_type:f.order_type, width:'', height:'', qty:1, unit_price:'' }] }))
-  const removeItem = i => setForm(f => ({ ...f, items: f.items.filter((_,idx)=>idx!==i) }))
+  const addItem = () => setForm(f => ({
+    ...f,
+    items: [...f.items, { product_desc:'', product_type:f.order_type, width:'', height:'', qty:1, unit_price:'' }]
+  }))
+
+  const removeItem = i => setForm(f => ({ ...f, items: f.items.filter((_,idx) => idx !== i) }))
+
   const updateItem = (i, field, val) => setForm(f => {
-    const items = [...f.items]; items[i] = {...items[i], [field]:val}; return {...f, items}
+    const items = [...f.items]; items[i] = { ...items[i], [field]: val }; return { ...f, items }
   })
+
+  const applyTemplate = (i, tpl) => {
+    setForm(f => {
+      const items = [...f.items]
+      items[i] = {
+        ...items[i],
+        product_desc: tpl.default_description || tpl.name,
+        product_type: tpl.order_type,
+        width: tpl.default_width || items[i].width,
+        height: tpl.default_height || items[i].height,
+        unit_price: tpl.unit_price || items[i].unit_price,
+      }
+      return { ...f, items }
+    })
+  }
+
+  const handleClientCreated = (client) => {
+    setClients(prev => [client, ...prev])
+    setForm(f => ({ ...f, client_id: client.id }))
+    setShowQuickClient(false)
+  }
 
   const handleSubmit = async e => {
     e.preventDefault()
@@ -42,8 +178,11 @@ function CreateOrderModal({ open, onClose, onCreated }) {
       toast.success('Поръчката е създадена')
       onCreated(res.data)
       onClose()
-      setForm({ client_id:'', order_type:'стъклопакет', deadline:'', is_urgent:false, sale_price:'', notes:'', source:'office',
-        items:[{ product_desc:'', product_type:'стъклопакет', width:'', height:'', qty:1, unit_price:'' }] })
+      setForm({
+        client_id:'', order_type:'стъклопакет', deadline:'', is_urgent:false,
+        sale_price:'', notes:'', source:'office',
+        items:[{ product_desc:'', product_type:'стъклопакет', width:'', height:'', qty:1, unit_price:'' }]
+      })
     } catch (err) {
       toast.error(err.response?.data?.error || 'Грешка при създаване')
     } finally { setLoading(false) }
@@ -53,46 +192,67 @@ function CreateOrderModal({ open, onClose, onCreated }) {
     <Modal open={open} onClose={onClose} title="Нова поръчка" size="xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="label">Клиент *</label>
-            <select className="select" value={form.client_id} onChange={e=>setForm(f=>({...f,client_id:e.target.value}))} required>
+          {/* Client selector + quick create */}
+          <div className="md:col-span-2">
+            <div className="flex items-center justify-between mb-1">
+              <label className="label mb-0">Клиент *</label>
+              {!showQuickClient && (
+                <button type="button" className="text-xs text-accent hover:underline"
+                  onClick={() => setShowQuickClient(true)}>
+                  + Нов клиент
+                </button>
+              )}
+            </div>
+            <select className="select" value={form.client_id}
+              onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} required>
               <option value="">-- Изберете клиент --</option>
               {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+            {showQuickClient && (
+              <QuickClientForm
+                onCreated={handleClientCreated}
+                onCancel={() => setShowQuickClient(false)}
+              />
+            )}
           </div>
+
           <div>
             <label className="label">Тип поръчка *</label>
-            <select className="select" value={form.order_type} onChange={e=>setForm(f=>({...f,order_type:e.target.value}))}>
+            <select className="select" value={form.order_type}
+              onChange={e => setForm(f => ({ ...f, order_type: e.target.value }))}>
               {TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div>
             <label className="label">Краен срок</label>
-            <input type="date" className="input" value={form.deadline} onChange={e=>setForm(f=>({...f,deadline:e.target.value}))} />
+            <input type="date" className="input" value={form.deadline}
+              onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
           </div>
           <div>
             <label className="label">Канал</label>
-            <select className="select" value={form.source} onChange={e=>setForm(f=>({...f,source:e.target.value}))}>
-              {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            <select className="select" value={form.source}
+              onChange={e => setForm(f => ({ ...f, source: e.target.value }))}>
+              {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{SOURCE_LABELS[s] || s}</option>)}
             </select>
           </div>
           {isAdmin && (
             <div>
               <label className="label">Продажна цена (лв)</label>
               <input type="number" className="input" placeholder="0.00" value={form.sale_price}
-                onChange={e=>setForm(f=>({...f,sale_price:e.target.value}))} />
+                onChange={e => setForm(f => ({ ...f, sale_price: e.target.value }))} />
             </div>
           )}
           <div className="flex items-center gap-3 pt-5">
             <input type="checkbox" id="urgent" className="w-4 h-4 accent-danger" checked={form.is_urgent}
-              onChange={e=>setForm(f=>({...f,is_urgent:e.target.checked}))} />
+              onChange={e => setForm(f => ({ ...f, is_urgent: e.target.checked }))} />
             <label htmlFor="urgent" className="text-sm text-gray-200">Спешна поръчка</label>
           </div>
         </div>
+
         <div>
           <label className="label">Бележки</label>
           <textarea className="input resize-none" rows={2} value={form.notes}
-            onChange={e=>setForm(f=>({...f,notes:e.target.value}))} />
+            onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
         </div>
 
         {/* Items */}
@@ -103,24 +263,44 @@ function CreateOrderModal({ open, onClose, onCreated }) {
           </div>
           <div className="space-y-2">
             {form.items.map((item, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                <input className="input col-span-4" placeholder="Описание (напр. 4-16Ar-4 Low-E)" value={item.product_desc}
-                  onChange={e=>updateItem(i,'product_desc',e.target.value)} />
-                <input className="input col-span-2" placeholder="Ш мм" type="number" value={item.width}
-                  onChange={e=>updateItem(i,'width',e.target.value)} />
-                <input className="input col-span-2" placeholder="В мм" type="number" value={item.height}
-                  onChange={e=>updateItem(i,'height',e.target.value)} />
-                <input className="input col-span-1" placeholder="Бр" type="number" min="1" value={item.qty}
-                  onChange={e=>updateItem(i,'qty',e.target.value)} />
-                {isAdmin && (
-                  <input className="input col-span-2" placeholder="Ед. цена" type="number" value={item.unit_price}
-                    onChange={e=>updateItem(i,'unit_price',e.target.value)} />
-                )}
-                <button type="button" className="col-span-1 text-muted hover:text-danger flex justify-center"
-                  onClick={()=>removeItem(i)} disabled={form.items.length===1}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+              <div key={i} className="space-y-1">
+                <div className="grid grid-cols-12 gap-2 items-center">
+                  {/* Description + catalog trigger */}
+                  <div className="col-span-4 relative">
+                    <input className="input w-full" placeholder="Описание (напр. 4-16Ar-4 Low-E)"
+                      value={item.product_desc}
+                      onChange={e => updateItem(i, 'product_desc', e.target.value)} />
+                    {catalogOpenIdx === i && (
+                      <CatalogPicker
+                        orderType={form.order_type}
+                        onSelect={tpl => applyTemplate(i, tpl)}
+                        onClose={() => setCatalogOpenIdx(null)}
+                      />
+                    )}
+                  </div>
+                  <input className="input col-span-2" placeholder="Ш мм" type="number" value={item.width}
+                    onChange={e => updateItem(i, 'width', e.target.value)} />
+                  <input className="input col-span-2" placeholder="В мм" type="number" value={item.height}
+                    onChange={e => updateItem(i, 'height', e.target.value)} />
+                  <input className="input col-span-1" placeholder="Бр" type="number" min="1" value={item.qty}
+                    onChange={e => updateItem(i, 'qty', e.target.value)} />
+                  {isAdmin && (
+                    <input className="input col-span-2" placeholder="Ед. цена" type="number" value={item.unit_price}
+                      onChange={e => updateItem(i, 'unit_price', e.target.value)} />
+                  )}
+                  <button type="button"
+                    className={`${isAdmin ? 'col-span-1' : 'col-span-3'} text-muted hover:text-danger flex justify-center`}
+                    onClick={() => removeItem(i)} disabled={form.items.length === 1}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                {/* Catalog button per row */}
+                <button type="button"
+                  className="text-xs text-accent hover:underline ml-0.5"
+                  onClick={() => setCatalogOpenIdx(catalogOpenIdx === i ? null : i)}>
+                  {catalogOpenIdx === i ? '↑ Затвори каталога' : '☰ Избери от каталога'}
                 </button>
               </div>
             ))}
@@ -138,6 +318,7 @@ function CreateOrderModal({ open, onClose, onCreated }) {
   )
 }
 
+// ─── Main Orders page ─────────────────────────────────────────────────────────
 export default function Orders() {
   const [orders, setOrders] = useState([])
   const [total, setTotal] = useState(0)
@@ -164,7 +345,7 @@ export default function Orders() {
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
-  const setFilter = (key, val) => setFilters(f => ({...f, [key]:val, page:1}))
+  const setFilter = (key, val) => setFilters(f => ({ ...f, [key]: val, page: 1 }))
 
   return (
     <div>
@@ -218,7 +399,9 @@ export default function Orders() {
                     <td>
                       <span className="font-bold text-accent">#{o.order_number}</span>
                       {o.is_urgent && <span className="ml-1 text-danger text-xs">●</span>}
-                      {o.open_defects > 0 && <span className="ml-1 badge bg-red-500/20 text-red-400 text-xs">{o.open_defects} брак</span>}
+                      {o.open_defects > 0 && (
+                        <span className="ml-1 badge bg-red-500/20 text-red-400 text-xs">{o.open_defects} брак</span>
+                      )}
                     </td>
                     <td>
                       <div className="font-medium text-white">{o.client_name}</div>
@@ -244,10 +427,10 @@ export default function Orders() {
       {total > 30 && (
         <div className="flex justify-center gap-2 mt-4">
           <button className="btn-secondary" disabled={filters.page === 1}
-            onClick={() => setFilters(f => ({...f, page: f.page-1}))}>← Назад</button>
+            onClick={() => setFilters(f => ({ ...f, page: f.page - 1 }))}>← Назад</button>
           <span className="px-4 py-2 text-sm text-muted">Страница {filters.page}</span>
           <button className="btn-secondary" disabled={orders.length < 30}
-            onClick={() => setFilters(f => ({...f, page: f.page+1}))}>Напред →</button>
+            onClick={() => setFilters(f => ({ ...f, page: f.page + 1 }))}>Напред →</button>
         </div>
       )}
 

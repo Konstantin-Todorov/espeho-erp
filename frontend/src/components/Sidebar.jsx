@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import GlobalSearch from './GlobalSearch'
 import toast from 'react-hot-toast'
 
 const Icon = ({ path }) => (
@@ -100,6 +101,11 @@ export default function Sidebar({ mobile, onClose }) {
             <p className="text-xs text-muted">ERP система</p>
           </div>
         </div>
+      </div>
+
+      {/* Global Search */}
+      <div className="py-3 border-b border-border">
+        <GlobalSearch />
       </div>
 
       {/* Nav */}

@@ -7,6 +7,40 @@ import { bg } from 'date-fns/locale'
 
 const COLORS = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4']
 
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+function exportCSV(data, filename) {
+  if (!data || data.length === 0) return
+  const headers = Object.keys(data[0]).join(',')
+  const rows = data.map(row =>
+    Object.values(row).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')
+  )
+  const csv = [headers, ...rows].join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }) // BOM for Excel
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function ExportButton({ data, filename, label = 'Експорт Excel' }) {
+  if (!data || data.length === 0) return null
+  return (
+    <button
+      className="btn-secondary text-sm flex items-center gap-2"
+      onClick={() => exportCSV(data, filename)}
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+      {label}
+    </button>
+  )
+}
+
+// ─── Date Range Filter ────────────────────────────────────────────────────────
 function DateRangeFilter({ from, to, onChange }) {
   return (
     <div className="flex items-center gap-2">
@@ -17,6 +51,7 @@ function DateRangeFilter({ from, to, onChange }) {
   )
 }
 
+// ─── Main Reports Page ────────────────────────────────────────────────────────
 export default function Reports() {
   const [tab, setTab] = useState('costs')
   const defaultFrom = format(startOfMonth(new Date()), 'yyyy-MM-dd')
@@ -45,11 +80,68 @@ export default function Reports() {
       .finally(() => setLoading(false))
   }, [tab, from, to])
 
+  // Flatten data for CSV export per tab
+  const getExportData = () => {
+    if (!data) return null
+    if (tab === 'costs') {
+      if (!data.monthly || data.monthly.length === 0) return null
+      return data.monthly.map(m => ({
+        месец: m.month,
+        приход_лв: Number(m.revenue || 0).toFixed(2),
+        разходи_лв: Number(m.cost || 0).toFixed(2),
+        марж_лв: Number(m.margin || 0).toFixed(2),
+      }))
+    }
+    if (tab === 'orders') {
+      return (data || []).map(o => ({
+        номер: o.order_number,
+        клиент: o.client_name,
+        статус: o.status,
+        тип: o.order_type,
+        краен_срок: o.deadline || '',
+        приход_лв: o.sale_price || '',
+        разход_лв: o.total_cost || '',
+        марж_процент: o.margin_pct || '',
+      }))
+    }
+    if (tab === 'production') {
+      return (data || []).map(w => ({
+        работник: w.name,
+        поръчки: w.orders_worked,
+        часове: (w.total_minutes / 60).toFixed(1),
+        разход_труд_лв: Number(w.labor_cost).toFixed(2),
+        брак: w.defects_caused,
+      }))
+    }
+    if (tab === 'materials') {
+      return (data || []).map(m => ({
+        материал: m.name,
+        категория: m.category,
+        консумирано: Number(m.total_consumed).toFixed(2),
+        единица: m.unit,
+        стойност_лв: Number(m.total_value).toFixed(2),
+      }))
+    }
+    if (tab === 'defects') {
+      return data.byCause?.map(c => ({
+        причина: c.cause_type,
+        брой: c.count,
+        стойност_лв: Number(c.total_cost).toFixed(2),
+      })) || null
+    }
+    return null
+  }
+
+  const exportData = getExportData()
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <h1 className="text-2xl font-bold text-white">Репорти</h1>
-        <DateRangeFilter from={from} to={to} onChange={handleDate} />
+        <div className="flex items-center gap-3 flex-wrap">
+          <DateRangeFilter from={from} to={to} onChange={handleDate} />
+          <ExportButton data={exportData} filename={`espeho-${tab}-${from}-${to}.csv`} />
+        </div>
       </div>
 
       {/* Tabs */}
@@ -123,7 +215,7 @@ export default function Reports() {
                   <Tooltip contentStyle={{ background:'#181c27', border:'1px solid #252a3a', borderRadius:8 }}
                     formatter={v => [`${Number(v).toFixed(2)} лв`]} />
                   <Legend />
-                  <Bar dataKey="revenue" name="Приход" fill="#22c55e" radius={[4,4,0,0]} />
+                  <Bar dataKey="revenue" name="Приход"  fill="#22c55e" radius={[4,4,0,0]} />
                   <Bar dataKey="cost"    name="Разходи" fill="#3b82f6" radius={[4,4,0,0]} />
                   <Bar dataKey="margin"  name="Марж"    fill="#8b5cf6" radius={[4,4,0,0]} />
                 </BarChart>

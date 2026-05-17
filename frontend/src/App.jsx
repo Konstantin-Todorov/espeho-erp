@@ -9,6 +9,7 @@ import Production from './pages/Production'
 import Defects from './pages/Defects'
 import Warehouse from './pages/Warehouse'
 import Clients from './pages/Clients'
+import ClientDetail from './pages/ClientDetail'
 import Machines from './pages/Machines'
 import Reports from './pages/Reports'
 import Users from './pages/Users'
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route path="defects" element={<ProtectedRoute roles={['admin','office','production']}><Defects /></ProtectedRoute>} />
         <Route path="warehouse" element={<ProtectedRoute roles={['admin','office','warehouse']}><Warehouse /></ProtectedRoute>} />
         <Route path="clients" element={<ProtectedRoute roles={['admin','office']}><Clients /></ProtectedRoute>} />
+        <Route path="clients/:id" element={<ProtectedRoute roles={['admin','office']}><ClientDetail /></ProtectedRoute>} />
         <Route path="machines" element={<ProtectedRoute roles={['admin','production']}><Machines /></ProtectedRoute>} />
         <Route path="reports" element={<ProtectedRoute roles={['admin','office']}><Reports /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute roles={['admin']}><Users /></ProtectedRoute>} />
