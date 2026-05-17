@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 const notify = require('../utils/notify');
+const { sendEmail, orderReadyEmail } = require('../utils/email');
 
 const router = express.Router();
 router.use(auth);
@@ -218,7 +219,10 @@ router.patch('/:id/status', roleCheck('admin','office','production'), async (req
 
     const { rows: updated } = await pool.query(
       `UPDATE orders SET status=$1::order_status, notes=COALESCE($2,notes),
-       updated_by=$3, updated_at=NOW() WHERE id=$4 RETURNING *, (SELECT name FROM clients WHERE id=orders.client_id) AS client_name`,
+       updated_by=$3, updated_at=NOW() WHERE id=$4
+       RETURNING *,
+         (SELECT name FROM clients WHERE id=orders.client_id) AS client_name,
+         (SELECT email FROM clients WHERE id=orders.client_id) AS client_email`,
       [status, notes, req.user.id, req.params.id]
     );
     const order = updated[0];
@@ -231,6 +235,13 @@ router.patch('/:id/status', roleCheck('admin','office','production'), async (req
         title: `Поръчка ${num} е готова`,
         body: `Клиент: ${order.client_name} — готова за доставка`,
         link, orderId: order.id });
+      // Email client if they have an email
+      if (order.client_email) {
+        const trackUrl = order.tracking_token
+          ? `${process.env.FRONTEND_URL || ''}/track/${order.tracking_token}` : null;
+        const tpl = orderReadyEmail(num, order.client_name, trackUrl);
+        sendEmail({ to: order.client_email, ...tpl });
+      }
     } else if (status === 'ПРОИЗВОДСТВО') {
       await notify({ roles: ['production'], type: 'order_production',
         title: `Нова поръчка в производство: ${num}`,

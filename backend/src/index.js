@@ -59,6 +59,7 @@ app.use((err, req, res, next) => {
 
 // ── Periodic jobs ──────────────────────────────────────────
 const notify = require('./utils/notify');
+const { sendEmail, overdueEmail, lowStockEmail } = require('./utils/email');
 const pool   = require('./db/pool');
 
 async function checkLowStock() {
@@ -74,6 +75,8 @@ async function checkLowStock() {
         )
       LIMIT 10
     `);
+    if (rows.length === 0) return;
+
     for (const s of rows) {
       await notify({
         roles: ['admin','warehouse'],
@@ -82,6 +85,17 @@ async function checkLowStock() {
         body: `Налично: ${s.quantity} / Минимум: ${s.min_threshold}`,
         link: '/warehouse',
       });
+    }
+
+    // Email warehouse/admin users
+    const warehouseEmails = await pool.query(
+      `SELECT email FROM users WHERE role IN ('admin','warehouse') AND active=true AND email IS NOT NULL`
+    );
+    for (const s of rows) {
+      for (const u of warehouseEmails.rows) {
+        const tpl = lowStockEmail(s.name, s.quantity, s.min_threshold);
+        sendEmail({ to: u.email, ...tpl });
+      }
     }
   } catch (err) {
     console.error('checkLowStock error:', err.message);
@@ -111,7 +125,19 @@ async function checkOverdueOrders() {
         orderId: o.id,
       });
     }
-    if (rows.length > 0) console.log(`⚠️  Sent overdue notifications for ${rows.length} orders`);
+    // Also email office/admin users
+    if (rows.length > 0) {
+      console.log(`⚠️  Sent overdue notifications for ${rows.length} orders`);
+      const adminEmails = await pool.query(
+        `SELECT email FROM users WHERE role IN ('admin','office') AND active=true AND email IS NOT NULL`
+      );
+      for (const o of rows) {
+        for (const u of adminEmails.rows) {
+          const tpl = overdueEmail(o.order_number, o.client_name, o.deadline || 'неизвестна');
+          sendEmail({ to: u.email, ...tpl });
+        }
+      }
+    }
   } catch (err) {
     console.error('checkOverdueOrders error:', err.message);
   }
