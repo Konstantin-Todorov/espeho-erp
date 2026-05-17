@@ -7,11 +7,12 @@ const router = express.Router();
 router.use(auth);
 
 // GET /api/production/board — Kanban view
-// GET /api/production/workers — list of production workers (for assignment)
+// GET /api/production/workers — all active users available for stage assignment
 router.get('/workers', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, name, role FROM users WHERE role='production' AND is_active=true ORDER BY name`
+      `SELECT id, name, role FROM users WHERE is_active=true ORDER BY
+         CASE role WHEN 'production' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name`
     );
     res.json(rows);
   } catch (err) {

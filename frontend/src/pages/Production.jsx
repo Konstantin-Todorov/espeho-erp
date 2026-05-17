@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { StageStatusBadge, UrgentBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
@@ -10,10 +10,13 @@ import { bg } from 'date-fns/locale'
 const STAGE_COLUMNS = ['Рязане','Миене','Сглобяване','Заливане','Шлайфане','Кантиране']
 
 function BoardCard({ order, onUpdate }) {
+  const navigate = useNavigate()
   const isOverdue = order.deadline && isPast(parseISO(order.deadline))
-  const activeStage = order.stages?.find(s => s.status === 'В_ПРОЦЕС') || order.stages?.find(s => s.status === 'ЧАКАЩ')
+  const doneCount = order.stages?.filter(s => s.status === 'ГОТОВ').length || 0
+  const totalCount = order.stages?.length || 0
 
-  const handleStageUpdate = async (stageId, status) => {
+  const handleStageUpdate = async (e, stageId, status) => {
+    e.stopPropagation()
     try {
       await api.patch(`/production/stages/${stageId}`, { status })
       toast.success('Етапът е обновен')
@@ -24,57 +27,88 @@ function BoardCard({ order, onUpdate }) {
   }
 
   return (
-    <div className={`card mb-3 ${isOverdue ? 'border-red-500/30' : ''}`}>
-      <div className="flex items-start justify-between mb-3">
+    <div
+      onClick={() => navigate(`/orders/${order.id}`)}
+      className={`card mb-3 cursor-pointer hover:border-accent/50 hover:shadow-lg transition-all group
+        ${isOverdue ? 'border-red-500/30' : ''}`}>
+
+      {/* Header */}
+      <div className="flex items-start justify-between mb-2">
         <div>
-          <Link to={`/orders/${order.id}`} className="font-bold text-accent hover:underline">
-            #{order.order_number}
-          </Link>
-          {order.is_urgent && <span className="ml-2 text-danger text-xs">●</span>}
-          <p className="text-sm text-gray-300 mt-0.5">{order.client_name}</p>
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-accent group-hover:underline">#{order.order_number}</span>
+            {order.is_urgent && <span className="text-danger text-xs">⚡ Спешна</span>}
+          </div>
+          <p className="text-sm text-white mt-0.5">{order.client_name}</p>
           <p className="text-xs text-muted">{order.order_type}</p>
         </div>
-        {order.deadline && (
-          <span className={`text-xs px-2 py-0.5 rounded ${isOverdue ? 'bg-red-500/20 text-danger' : 'text-muted'}`}>
-            {isOverdue ? '⚠ ' : ''}{format(parseISO(order.deadline), 'd MMM', { locale: bg })}
-          </span>
-        )}
+        <div className="text-right flex-shrink-0">
+          {order.deadline && (
+            <span className={`text-xs px-1.5 py-0.5 rounded ${isOverdue ? 'bg-red-500/20 text-danger' : 'text-muted'}`}>
+              {isOverdue ? '⚠ ' : ''}{format(parseISO(order.deadline), 'd MMM', { locale: bg })}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Stage progress */}
-      <div className="space-y-1.5">
+      {/* Progress bar */}
+      {totalCount > 0 && (
+        <div className="mb-2">
+          <div className="flex justify-between text-xs text-muted mb-1">
+            <span>Напредък</span>
+            <span>{doneCount}/{totalCount} етапа</span>
+          </div>
+          <div className="h-1 bg-border rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${doneCount === totalCount ? 'bg-green-500' : 'bg-accent'}`}
+              style={{ width: `${totalCount > 0 ? Math.round(doneCount/totalCount*100) : 0}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* Stage list */}
+      <div className="space-y-1">
         {order.stages?.map(stage => (
-          <div key={stage.id} className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg
-            ${stage.status==='ГОТОВ' ? 'bg-green-500/10' :
-              stage.status==='В_ПРОЦЕС' ? 'bg-orange-500/10' : 'bg-border/50'}`}>
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full flex-shrink-0
+          <div key={stage.id} onClick={e => e.stopPropagation()}
+            className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg
+              ${stage.status==='ГОТОВ' ? 'bg-green-500/10' :
+                stage.status==='В_ПРОЦЕС' ? 'bg-orange-500/10 ring-1 ring-orange-500/20' : 'bg-border/40'}`}>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0
                 ${stage.status==='ГОТОВ' ? 'bg-green-400' :
                   stage.status==='В_ПРОЦЕС' ? 'bg-orange-400' : 'bg-gray-600'}`} />
-              <span className={stage.status==='ГОТОВ' ? 'text-green-400' :
-                stage.status==='В_ПРОЦЕС' ? 'text-orange-400' : 'text-muted'}>
+              <span className={`truncate ${stage.status==='ГОТОВ' ? 'text-green-400' :
+                stage.status==='В_ПРОЦЕС' ? 'text-orange-300 font-medium' : 'text-muted'}`}>
                 {stage.stage_name}
               </span>
-              {stage.worker_name && <span className="text-muted">· {stage.worker_name.split(' ')[0]}</span>}
+              {stage.worker_name && (
+                <span className="text-muted flex-shrink-0">· {stage.worker_name.split(' ')[0]}</span>
+              )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0">
               {stage.status === 'ЧАКАЩ' && (
-                <button className="px-2 py-0.5 rounded bg-border text-muted hover:text-white text-xs"
-                  onClick={() => handleStageUpdate(stage.id, 'В_ПРОЦЕС')}>Започни</button>
+                <button className="px-2 py-0.5 rounded bg-border text-muted hover:bg-accent/20 hover:text-accent text-xs transition-colors"
+                  onClick={e => handleStageUpdate(e, stage.id, 'В_ПРОЦЕС')}>Започни</button>
               )}
               {stage.status === 'В_ПРОЦЕС' && (
-                <button className="px-2 py-0.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 text-xs"
-                  onClick={() => handleStageUpdate(stage.id, 'ГОТОВ')}>✓ Готово</button>
+                <button className="px-2 py-0.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 text-xs transition-colors"
+                  onClick={e => handleStageUpdate(e, stage.id, 'ГОТОВ')}>✓ Готово</button>
               )}
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Footer link cue */}
+      <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between">
+        <span className="text-xs text-muted">Кликни за пълен детайл</span>
+        <span className="text-xs text-accent group-hover:translate-x-0.5 transition-transform">Отвори →</span>
       </div>
     </div>
   )
 }
 
 export default function Production() {
+  const navigate = useNavigate()
   const [board, setBoard] = useState([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('board') // 'board' | 'list'
@@ -145,12 +179,13 @@ export default function Production() {
                 const active = order.stages?.find(s => s.status === 'В_ПРОЦЕС') || order.stages?.find(s => s.status === 'ЧАКАЩ')
                 const isOverdue = order.deadline && isPast(parseISO(order.deadline))
                 return (
-                  <tr key={order.id}>
+                  <tr key={order.id} className="cursor-pointer hover:bg-surface/60 transition-colors"
+                    onClick={() => navigate(`/orders/${order.id}`)}>
                     <td>
-                      <Link to={`/orders/${order.id}`} className="text-accent font-bold hover:underline">
+                      <span className="text-accent font-bold hover:underline">
                         #{order.order_number}
-                      </Link>
-                      {order.is_urgent && <span className="ml-1 text-danger text-xs">●</span>}
+                      </span>
+                      {order.is_urgent && <span className="ml-1 text-danger text-xs">⚡</span>}
                     </td>
                     <td>{order.client_name}</td>
                     <td>

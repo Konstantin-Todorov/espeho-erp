@@ -524,15 +524,15 @@ export default function OrderDetail() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-white">{stage.stage_name}</p>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        {(isAdmin || user?.role === 'office') && workers.length > 0 && stage.status !== 'ГОТОВ' ? (
+                        {(isAdmin || user?.role === 'office') && stage.status !== 'ГОТОВ' ? (
                           <select
-                            className="text-xs bg-transparent border border-border rounded px-1.5 py-0.5 text-muted hover:border-accent/50 focus:outline-none focus:border-accent cursor-pointer"
+                            className="text-xs bg-surface border border-border rounded px-1.5 py-0.5 text-muted hover:border-accent/50 focus:outline-none focus:border-accent cursor-pointer"
                             value={stage.assigned_to || ''}
                             onChange={async e => {
                               await api.patch(`/production/stages/${stage.id}`, { assigned_to: e.target.value || null })
                               fetchOrder()
                             }}>
-                            <option value="">— Назначи работник</option>
+                            <option value="">👤 Назначи работник</option>
                             {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                           </select>
                         ) : stage.worker_name ? (
