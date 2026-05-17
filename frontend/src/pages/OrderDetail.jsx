@@ -344,6 +344,8 @@ export default function OrderDetail() {
   const [newComment, setNewComment] = useState('')
   const [sendingComment, setSendingComment] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
+  const [qualityChecks, setQualityChecks] = useState([])
+  const [deliveries, setDeliveries] = useState([])
 
   const fetchOrder = async () => {
     try {
@@ -357,9 +359,14 @@ export default function OrderDetail() {
 
   const fetchComments = () => api.get(`/comments/${id}`).then(r => setComments(r.data)).catch(() => {})
 
+  const fetchQuality = () => api.get(`/quality/${id}`).then(r => setQualityChecks(r.data)).catch(() => {})
+  const fetchDeliveries = () => api.get(`/deliveries/order/${id}`).then(r => setDeliveries(r.data)).catch(() => {})
+
   useEffect(() => {
     fetchOrder()
     fetchComments()
+    fetchQuality()
+    fetchDeliveries()
     api.get('/production/workers').then(r => setWorkers(r.data)).catch(() => {})
   }, [id])
 
@@ -415,9 +422,13 @@ export default function OrderDetail() {
   const nextStatuses = STATUS_FLOW[order.status] || []
   const isOverdue = order.deadline && new Date(order.deadline) < new Date() && !['ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА'].includes(order.status)
 
+  const qualityDone = qualityChecks.filter(c => c.checked).length
+  const qualityTotal = qualityChecks.length
+
   const TABS = [
     { id: 'stages',   label: 'Производство' },
     { id: 'items',    label: 'Артикули' },
+    { id: 'quality',  label: 'Контрол', badge: qualityTotal > 0 ? `${qualityDone}/${qualityTotal}` : null },
     { id: 'comments', label: 'Коментари', badge: comments.length },
     { id: 'files',    label: 'Файлове', badge: order.files?.length || 0 },
     { id: 'defects',  label: 'Брак', badge: order.defects?.filter(d => !d.decision).length },
@@ -444,6 +455,18 @@ export default function OrderDetail() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {(isAdmin || user?.role === 'office') && (
+            <button className="btn-secondary" title="Клонирай поръчката"
+              onClick={async () => {
+                try {
+                  const { data } = await api.post(`/orders/${id}/clone`, {})
+                  toast.success(`Клонирана → Поръчка #${data.order_number}`)
+                  navigate(`/orders/${data.id}`)
+                } catch (err) { toast.error(err.response?.data?.error || 'Грешка') }
+              }}>
+              📋 Клонирай
+            </button>
+          )}
           <button className="btn-secondary" onClick={() => printWorkOrder(order)} title="Производствен лист">
             🖨️ Лист
           </button>
@@ -506,8 +529,10 @@ export default function OrderDetail() {
                 className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap
                   ${activeTab === tab.id ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-white'}`}>
                 {tab.label}
-                {tab.badge > 0 && (
-                  <span className="ml-1 badge bg-red-500/20 text-red-400 text-xs">{tab.badge}</span>
+                {(tab.badge > 0 || (typeof tab.badge === 'string' && tab.badge)) && (
+                  <span className={`ml-1 badge text-xs ${tab.id === 'quality' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {tab.badge}
+                  </span>
                 )}
               </button>
             ))}
@@ -579,6 +604,67 @@ export default function OrderDetail() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Quality control tab */}
+          {activeTab === 'quality' && (
+            <div className="space-y-3">
+              {qualityChecks.every(c => c.id === null) && (
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-muted">Стандартен контролен лист</p>
+                  <button className="btn-secondary text-xs py-1"
+                    onClick={async () => {
+                      try {
+                        const { data } = await api.post(`/quality/${id}/init`, {})
+                        setQualityChecks(data)
+                        toast.success('Контролният лист е инициализиран')
+                      } catch { toast.error('Грешка') }
+                    }}>
+                    ✓ Инициализирай
+                  </button>
+                </div>
+              )}
+              {qualityTotal > 0 && (
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="flex-1 bg-border rounded-full h-2">
+                    <div className="h-2 rounded-full bg-green-500 transition-all"
+                      style={{ width: `${Math.round(qualityDone/qualityTotal*100)}%` }} />
+                  </div>
+                  <span className="text-sm font-medium text-white">{qualityDone}/{qualityTotal}</span>
+                  {qualityDone === qualityTotal && qualityTotal > 0 && (
+                    <span className="text-green-400 text-xs font-medium">✓ Готово</span>
+                  )}
+                </div>
+              )}
+              <div className="space-y-2">
+                {qualityChecks.map(qc => (
+                  <div key={qc.id || qc.item} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors cursor-pointer
+                    ${qc.checked ? 'bg-green-500/5 border-green-500/30' : 'bg-bg border-border hover:border-accent/50'}`}
+                    onClick={async () => {
+                      if (!qc.id) { toast('Инициализирайте листа първо'); return }
+                      try {
+                        const { data } = await api.patch(`/quality/${qc.id}/toggle`)
+                        setQualityChecks(cs => cs.map(c => c.id === qc.id ? { ...c, ...data } : c))
+                      } catch { toast.error('Грешка') }
+                    }}>
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors
+                      ${qc.checked ? 'bg-green-500 border-green-500' : 'border-border'}`}>
+                      {qc.checked && <span className="text-white text-xs font-bold">✓</span>}
+                    </div>
+                    <div className="flex-1">
+                      <p className={`text-sm font-medium ${qc.checked ? 'line-through text-muted' : 'text-white'}`}>
+                        {qc.item}
+                      </p>
+                      {qc.checked && qc.checked_by_name && (
+                        <p className="text-xs text-muted">
+                          {qc.checked_by_name} · {qc.checked_at ? format(parseISO(qc.checked_at), 'HH:mm d MMM', { locale: bg }) : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

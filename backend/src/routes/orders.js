@@ -255,6 +255,66 @@ router.patch('/:id/status', roleCheck('admin','office','production'), async (req
   }
 });
 
+// POST /api/orders/:id/clone — clone an existing order
+router.post('/:id/clone', roleCheck('admin','office'), async (req, res) => {
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query('BEGIN');
+
+    const { rows: src } = await dbClient.query(
+      `SELECT o.*, array_agg(json_build_object(
+         'product_type',oi.product_type,'product_desc',oi.product_desc,
+         'width',oi.width,'height',oi.height,'qty',oi.qty,
+         'unit_price',oi.unit_price,'notes',oi.notes,'sort_order',oi.sort_order
+       ) ORDER BY oi.sort_order) FILTER (WHERE oi.id IS NOT NULL) AS items,
+       array_agg(json_build_object('stage_name',ps.stage_name,'stage_order',ps.stage_order)
+         ORDER BY ps.stage_order) FILTER (WHERE ps.id IS NOT NULL) AS stage_names
+       FROM orders o
+       LEFT JOIN order_items oi ON oi.order_id=o.id
+       LEFT JOIN production_stages ps ON ps.order_id=o.id
+       WHERE o.id=$1 GROUP BY o.id`, [req.params.id]
+    );
+    if (!src[0]) return res.status(404).json({ error: 'Поръчката не е намерена' });
+    const s = src[0];
+
+    const cloneRes = await dbClient.query(
+      `INSERT INTO orders (client_id, order_type, deadline, is_urgent, sale_price,
+                           notes, delivery_address, source, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [s.client_id, s.order_type, req.body.deadline || null,
+       req.body.is_urgent ?? s.is_urgent,
+       s.sale_price, s.notes, s.delivery_address, s.source, req.user.id]
+    );
+    const clone = cloneRes.rows[0];
+
+    for (const it of s.items || []) {
+      await dbClient.query(
+        `INSERT INTO order_items (order_id,product_type,product_desc,width,height,qty,unit_price,notes,sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [clone.id, it.product_type, it.product_desc, it.width, it.height, it.qty, it.unit_price, it.notes, it.sort_order]
+      );
+    }
+
+    for (const st of s.stage_names || []) {
+      await dbClient.query(
+        'INSERT INTO production_stages (order_id,stage_name,stage_order) VALUES ($1,$2,$3)',
+        [clone.id, st.stage_name, st.stage_order]
+      );
+    }
+
+    await dbClient.query('INSERT INTO order_costs (order_id) VALUES ($1) ON CONFLICT DO NOTHING', [clone.id]);
+
+    await dbClient.query('COMMIT');
+    res.status(201).json(clone);
+  } catch (err) {
+    await dbClient.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Грешка при клониране' });
+  } finally {
+    dbClient.release();
+  }
+});
+
 // PATCH /api/orders/:id — general update
 router.patch('/:id', roleCheck('admin','office'), async (req, res) => {
   const { client_id, deadline, is_urgent, sale_price, notes, delivery_address, source } = req.body;
