@@ -126,14 +126,14 @@ function AdminDashboard() {
           <>
             <StatCard
               label="Приход (доставени)"
-              value={`${Number(data.revenue.revenue_delivered).toLocaleString()} лв`}
+              value={`${Number(data.revenue.revenue_delivered).toLocaleString()} €`}
               icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               color="text-green-400"
             />
             <StatCard
               label="Марж"
               value={`${marginPct}%`}
-              sub={`${margin.toFixed(0)} лв чиста печалба`}
+              sub={`${margin.toFixed(0)} € чиста печалба`}
               color={margin > 0 ? 'text-green-400' : 'text-danger'}
               icon="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
             />
@@ -142,7 +142,7 @@ function AdminDashboard() {
         <StatCard
           label="Брак този месец"
           value={data.defects.count}
-          sub={isAdmin ? `${data.defects.total_cost} лв` : undefined}
+          sub={isAdmin ? `${data.defects.total_cost} €` : undefined}
           color={data.defects.count > 5 ? 'text-danger' : 'text-white'}
           icon="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z"
         />
@@ -222,7 +222,7 @@ function AdminDashboard() {
                       {o.deadline ? format(parseISO(o.deadline), 'd MMM yyyy', { locale: bg }) : '—'}
                       {isOverdue && ' ⚠'}
                     </td>
-                    {isAdmin && <td className="text-right text-gray-300">{o.sale_price ? `${o.sale_price} лв` : '—'}</td>}
+                    {isAdmin && <td className="text-right text-gray-300">{o.sale_price ? `${o.sale_price} €` : '—'}</td>}
                   </tr>
                 )
               })}

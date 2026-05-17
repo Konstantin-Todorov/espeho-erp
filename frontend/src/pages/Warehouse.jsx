@@ -52,7 +52,7 @@ function ReceiveModal({ open, onClose, onDone, materials, locations }) {
               onChange={e=>setForm(f=>({...f,quantity:e.target.value}))} required />
           </div>
           <div>
-            <label className="label">Ед. цена (лв)</label>
+            <label className="label">Ед. цена (€)</label>
             <input type="number" className="input" min="0" step="0.01" placeholder="0.00" value={form.unit_price}
               onChange={e=>setForm(f=>({...f,unit_price:e.target.value}))} />
           </div>
@@ -194,7 +194,7 @@ function MaterialModal({ open, onClose, material, onSaved }) {
             <input className="input" value={form.unit} onChange={e=>setForm(f=>({...f,unit:e.target.value}))} required placeholder="м², кг, бр..." />
           </div>
           <div>
-            <label className="label">Цена / единица (лв)</label>
+            <label className="label">Цена / единица (€)</label>
             <input type="number" step="0.0001" min="0" className="input" value={form.price_per_unit}
               onChange={e=>setForm(f=>({...f,price_per_unit:e.target.value}))} placeholder="0.00" />
           </div>
@@ -285,7 +285,7 @@ function MaterialsManagement({ materials, onRefresh }) {
                 <td className="text-muted font-mono text-xs">{m.code || '—'}</td>
                 <td><span className="badge bg-border text-muted">{CAT_LABELS[m.category]}</span></td>
                 <td className="text-muted">{m.unit}</td>
-                <td className="text-right text-muted">{Number(m.price_per_unit || 0).toFixed(4)} лв</td>
+                <td className="text-right text-muted">{Number(m.price_per_unit || 0).toFixed(4)} €</td>
                 <td className="text-muted">{Number(m.total_qty || 0).toFixed(2)}</td>
                 <td>
                   <div className="flex gap-2 justify-end">
@@ -457,7 +457,7 @@ export default function Warehouse() {
                       <td className={`text-right font-medium ${hasLowStock ? 'text-yellow-400' : 'text-white'}`}>
                         {totalQty.toFixed(2)}{hasLowStock && ' ⚠'}
                       </td>
-                      <td className="text-right text-muted">{Number(m.price_per_unit).toFixed(4)} лв</td>
+                      <td className="text-right text-muted">{Number(m.price_per_unit).toFixed(4)} €</td>
                     </tr>
                   )
                 })}

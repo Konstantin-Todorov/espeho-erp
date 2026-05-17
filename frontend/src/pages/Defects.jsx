@@ -83,12 +83,12 @@ function CreateDefectModal({ open, onClose, onCreated, prefillOrderId }) {
             </select>
           </div>
           <div>
-            <label className="label">Стойност материали (лв)</label>
+            <label className="label">Стойност материали (€)</label>
             <input type="number" className="input" placeholder="0.00" value={form.material_cost}
               onChange={e=>setForm(f=>({...f,material_cost:e.target.value}))} />
           </div>
           <div>
-            <label className="label">Стойност труд (лв)</label>
+            <label className="label">Стойност труд (€)</label>
             <input type="number" className="input" placeholder="0.00" value={form.labor_cost}
               onChange={e=>setForm(f=>({...f,labor_cost:e.target.value}))} />
           </div>
@@ -148,7 +148,7 @@ export default function Defects() {
           <h1 className="text-2xl font-bold text-white">Брак</h1>
           <p className="text-sm text-muted mt-0.5">
             {defects.length} записа
-            {isAdmin && ` · ${totalCost.toFixed(2)} лв общо`}
+            {isAdmin && ` · ${totalCost.toFixed(2)} € общо`}
           </p>
         </div>
         {(isAdmin || isProduction) && (
@@ -201,7 +201,7 @@ export default function Defects() {
                   <td className="text-muted">{d.stage_name || '—'}</td>
                   {isAdmin && (
                     <td className="text-right text-danger font-medium">
-                      {Number(d.total_cost).toFixed(2)} лв
+                      {Number(d.total_cost).toFixed(2)} €
                     </td>
                   )}
                   <td>

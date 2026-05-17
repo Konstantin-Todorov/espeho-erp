@@ -87,9 +87,9 @@ export default function Reports() {
       if (!data.monthly || data.monthly.length === 0) return null
       return data.monthly.map(m => ({
         месец: m.month,
-        приход_лв: Number(m.revenue || 0).toFixed(2),
-        разходи_лв: Number(m.cost || 0).toFixed(2),
-        марж_лв: Number(m.margin || 0).toFixed(2),
+        приход_€: Number(m.revenue || 0).toFixed(2),
+        разходи_€: Number(m.cost || 0).toFixed(2),
+        марж_€: Number(m.margin || 0).toFixed(2),
       }))
     }
     if (tab === 'orders') {
@@ -99,8 +99,8 @@ export default function Reports() {
         статус: o.status,
         тип: o.order_type,
         краен_срок: o.deadline || '',
-        приход_лв: o.sale_price || '',
-        разход_лв: o.total_cost || '',
+        приход_€: o.sale_price || '',
+        разход_€: o.total_cost || '',
         марж_процент: o.margin_pct || '',
       }))
     }
@@ -109,7 +109,7 @@ export default function Reports() {
         работник: w.name,
         поръчки: w.orders_worked,
         часове: (w.total_minutes / 60).toFixed(1),
-        разход_труд_лв: Number(w.labor_cost).toFixed(2),
+        разход_труд_€: Number(w.labor_cost).toFixed(2),
         брак: w.defects_caused,
       }))
     }
@@ -119,14 +119,14 @@ export default function Reports() {
         категория: m.category,
         консумирано: Number(m.total_consumed).toFixed(2),
         единица: m.unit,
-        стойност_лв: Number(m.total_value).toFixed(2),
+        стойност_€: Number(m.total_value).toFixed(2),
       }))
     }
     if (tab === 'defects') {
       return data.byCause?.map(c => ({
         причина: c.cause_type,
         брой: c.count,
-        стойност_лв: Number(c.total_cost).toFixed(2),
+        стойност_€: Number(c.total_cost).toFixed(2),
       })) || null
     }
     return null
@@ -169,9 +169,9 @@ export default function Reports() {
           {/* Summary cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label:'Приход', val:`${Number(data.summary.total_revenue).toLocaleString()} лв`, color:'text-green-400' },
-              { label:'Себестойност', val:`${Number(data.summary.total_cost).toLocaleString()} лв`, color:'text-white' },
-              { label:'Марж', val:`${Number(data.summary.total_margin).toLocaleString()} лв`, color: Number(data.summary.total_margin)>0?'text-green-400':'text-danger' },
+              { label:'Приход', val:`${Number(data.summary.total_revenue).toLocaleString()} €`, color:'text-green-400' },
+              { label:'Себестойност', val:`${Number(data.summary.total_cost).toLocaleString()} €`, color:'text-white' },
+              { label:'Марж', val:`${Number(data.summary.total_margin).toLocaleString()} €`, color: Number(data.summary.total_margin)>0?'text-green-400':'text-danger' },
               { label:'Поръчки', val:data.summary.order_count, color:'text-white' },
             ].map(c => (
               <div key={c.label} className="card">
@@ -193,7 +193,7 @@ export default function Reports() {
               ].map(c => (
                 <div key={c.label}>
                   <p className="text-muted">{c.label}</p>
-                  <p className="text-white font-medium mt-0.5">{Number(c.val).toFixed(2)} лв</p>
+                  <p className="text-white font-medium mt-0.5">{Number(c.val).toFixed(2)} €</p>
                   <p className="text-xs text-muted">
                     {data.summary.total_cost > 0 ? ((c.val/data.summary.total_cost)*100).toFixed(1) : 0}%
                   </p>
@@ -213,7 +213,7 @@ export default function Reports() {
                     tickFormatter={d => format(parseISO(d), 'MMM yy', { locale: bg })} />
                   <YAxis tick={{ fill:'#6b7280', fontSize:11 }} />
                   <Tooltip contentStyle={{ background:'#181c27', border:'1px solid #252a3a', borderRadius:8 }}
-                    formatter={v => [`${Number(v).toFixed(2)} лв`]} />
+                    formatter={v => [`${Number(v).toFixed(2)} €`]} />
                   <Legend />
                   <Bar dataKey="revenue" name="Приход"  fill="#22c55e" radius={[4,4,0,0]} />
                   <Bar dataKey="cost"    name="Разходи" fill="#3b82f6" radius={[4,4,0,0]} />
@@ -241,8 +241,8 @@ export default function Reports() {
                   <td><span className="badge bg-border text-muted">{o.status}</span></td>
                   <td className="text-muted text-xs">{o.order_type}</td>
                   <td className="text-muted">{o.deadline ? format(parseISO(o.deadline), 'd MMM yy', { locale: bg }) : '—'}</td>
-                  <td className="text-green-400">{o.sale_price ? `${Number(o.sale_price).toFixed(2)} лв` : '—'}</td>
-                  <td className="text-danger">{o.total_cost ? `${Number(o.total_cost).toFixed(2)} лв` : '—'}</td>
+                  <td className="text-green-400">{o.sale_price ? `${Number(o.sale_price).toFixed(2)} €` : '—'}</td>
+                  <td className="text-danger">{o.total_cost ? `${Number(o.total_cost).toFixed(2)} €` : '—'}</td>
                   <td className={o.margin_pct > 0 ? 'text-green-400 font-medium' : o.margin_pct !== null ? 'text-danger' : 'text-muted'}>
                     {o.margin_pct !== null ? `${o.margin_pct}%` : '—'}
                   </td>
@@ -266,7 +266,7 @@ export default function Reports() {
                   <td className="font-medium text-white">{w.name}</td>
                   <td>{w.orders_worked}</td>
                   <td>{(w.total_minutes / 60).toFixed(1)} ч</td>
-                  <td className="text-danger">{Number(w.labor_cost).toFixed(2)} лв</td>
+                  <td className="text-danger">{Number(w.labor_cost).toFixed(2)} €</td>
                   <td className={w.defects_caused > 0 ? 'text-danger font-medium' : 'text-muted'}>{w.defects_caused}</td>
                 </tr>
               ))}
@@ -288,7 +288,7 @@ export default function Reports() {
                   <td className="font-medium text-white">{m.name}</td>
                   <td className="text-muted">{m.category}</td>
                   <td>{Number(m.total_consumed).toFixed(2)} {m.unit}</td>
-                  <td className="text-right font-medium">{Number(m.total_value).toFixed(2)} лв</td>
+                  <td className="text-right font-medium">{Number(m.total_value).toFixed(2)} €</td>
                 </tr>
               ))}
             </tbody>
@@ -306,7 +306,7 @@ export default function Reports() {
             </div>
             <div className="card">
               <p className="text-xs text-muted uppercase tracking-wide mb-1">Стойност</p>
-              <p className="text-xl font-bold text-danger">{Number(data.totals?.total_cost||0).toFixed(2)} лв</p>
+              <p className="text-xl font-bold text-danger">{Number(data.totals?.total_cost||0).toFixed(2)} €</p>
             </div>
             <div className="card">
               <p className="text-xs text-muted uppercase tracking-wide mb-1">Преработки</p>
@@ -327,7 +327,7 @@ export default function Reports() {
                   <span className="text-gray-300">{c.cause_type.replace('_',' ')}</span>
                   <div className="text-right">
                     <span className="text-white font-medium">{c.count}</span>
-                    <span className="text-danger ml-2">{Number(c.total_cost).toFixed(2)} лв</span>
+                    <span className="text-danger ml-2">{Number(c.total_cost).toFixed(2)} €</span>
                   </div>
                 </div>
               ))}
@@ -341,7 +341,7 @@ export default function Reports() {
                   <span className="text-gray-300">{w.name}</span>
                   <div className="text-right">
                     <span className="text-white font-medium">{w.count}</span>
-                    <span className="text-danger ml-2">{Number(w.total_cost).toFixed(2)} лв</span>
+                    <span className="text-danger ml-2">{Number(w.total_cost).toFixed(2)} €</span>
                   </div>
                 </div>
               ))}
@@ -356,7 +356,7 @@ export default function Reports() {
                   <span className="text-gray-300">{m.name}</span>
                   <div className="text-right">
                     <span className="text-white font-medium">{m.count}</span>
-                    <span className="text-danger ml-2">{Number(m.total_cost).toFixed(2)} лв</span>
+                    <span className="text-danger ml-2">{Number(m.total_cost).toFixed(2)} €</span>
                   </div>
                 </div>
               ))}

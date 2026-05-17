@@ -109,7 +109,7 @@ function CatalogPicker({ orderType, onSelect, onClose }) {
                   {t.default_description && <p className="text-xs text-muted">{t.default_description}</p>}
                 </div>
                 {t.unit_price && (
-                  <span className="text-accent text-sm font-medium flex-shrink-0">{Number(t.unit_price).toFixed(2)} лв</span>
+                  <span className="text-accent text-sm font-medium flex-shrink-0">{Number(t.unit_price).toFixed(2)} €</span>
                 )}
               </button>
             ))}
@@ -237,7 +237,7 @@ function CreateOrderModal({ open, onClose, onCreated }) {
           </div>
           {isAdmin && (
             <div>
-              <label className="label">Продажна цена (лв)</label>
+              <label className="label">Продажна цена (€)</label>
               <input type="number" className="input" placeholder="0.00" value={form.sale_price}
                 onChange={e => setForm(f => ({ ...f, sale_price: e.target.value }))} />
             </div>
@@ -413,7 +413,7 @@ export default function Orders() {
                       {o.deadline ? format(parseISO(o.deadline), 'd MMM yyyy', { locale: bg }) : '—'}
                       {isOverdue && ' ⚠'}
                     </td>
-                    <td className="text-muted">{o.sale_price ? `${Number(o.sale_price).toLocaleString()} лв` : '—'}</td>
+                    <td className="text-muted">{o.sale_price ? `${Number(o.sale_price).toLocaleString()} €` : '—'}</td>
                     <td className="text-muted text-xs">{format(parseISO(o.created_at), 'd MMM', { locale: bg })}</td>
                   </tr>
                 )

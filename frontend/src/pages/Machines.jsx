@@ -69,7 +69,7 @@ export default function Machines() {
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted">Цена/час</span>
-                <span className="text-white">{m.cost_per_hour} лв</span>
+                <span className="text-white">{m.cost_per_hour} €</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Последна поддръжка</span>
@@ -131,7 +131,7 @@ function MaintenanceModal({ open, onClose, machine, onDone }) {
             <input className="input" value={form.performed_by} onChange={e=>setForm(f=>({...f,performed_by:e.target.value}))} placeholder="Техник / фирма" />
           </div>
           <div>
-            <label className="label">Цена (лв)</label>
+            <label className="label">Цена (€)</label>
             <input type="number" className="input" value={form.cost} onChange={e=>setForm(f=>({...f,cost:e.target.value}))} placeholder="0.00" />
           </div>
           <div>

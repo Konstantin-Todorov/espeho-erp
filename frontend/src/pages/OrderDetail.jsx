@@ -29,33 +29,33 @@ function CostCard({ costs, salePrice, isAdmin }) {
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
           <span className="text-muted">Материали</span>
-          <span className="text-white font-medium">{Number(costs.material_cost).toFixed(2)} лв</span>
+          <span className="text-white font-medium">{Number(costs.material_cost).toFixed(2)} €</span>
         </div>
         <div className="flex justify-between">
           <span className="text-muted">Труд</span>
-          <span className="text-white font-medium">{Number(costs.labor_cost).toFixed(2)} лв</span>
+          <span className="text-white font-medium">{Number(costs.labor_cost).toFixed(2)} €</span>
         </div>
         <div className="flex justify-between">
           <span className="text-muted">Машини</span>
-          <span className="text-white font-medium">{Number(costs.machine_cost).toFixed(2)} лв</span>
+          <span className="text-white font-medium">{Number(costs.machine_cost).toFixed(2)} €</span>
         </div>
         <div className="flex justify-between">
           <span className="text-muted">Режийни ({costs.overhead_pct}%)</span>
-          <span className="text-white font-medium">{Number(costs.overhead_cost).toFixed(2)} лв</span>
+          <span className="text-white font-medium">{Number(costs.overhead_cost).toFixed(2)} €</span>
         </div>
         <div className="border-t border-border pt-2 flex justify-between font-bold">
           <span className="text-gray-200">Себестойност</span>
-          <span className="text-white">{Number(costs.total_cost).toFixed(2)} лв</span>
+          <span className="text-white">{Number(costs.total_cost).toFixed(2)} €</span>
         </div>
         {isAdmin && salePrice && (
           <>
             <div className="flex justify-between">
               <span className="text-muted">Продажна цена</span>
-              <span className="text-white font-medium">{Number(salePrice).toFixed(2)} лв</span>
+              <span className="text-white font-medium">{Number(salePrice).toFixed(2)} €</span>
             </div>
             <div className={`flex justify-between font-bold border-t border-border pt-2 ${margin > 0 ? 'text-green-400' : 'text-danger'}`}>
               <span>Марж</span>
-              <span>{margin?.toFixed(2)} лв ({marginPct}%)</span>
+              <span>{margin?.toFixed(2)} € ({marginPct}%)</span>
             </div>
           </>
         )}
@@ -416,8 +416,8 @@ export default function OrderDetail() {
                       <td>{item.product_desc}</td>
                       <td className="text-muted">{item.width && item.height ? `${item.width}×${item.height} мм` : '—'}</td>
                       <td>{item.qty}</td>
-                      {isAdmin && <td>{item.unit_price ? `${item.unit_price} лв` : '—'}</td>}
-                      {isAdmin && <td>{item.unit_price ? `${(item.qty * item.unit_price).toFixed(2)} лв` : '—'}</td>}
+                      {isAdmin && <td>{item.unit_price ? `${item.unit_price} €` : '—'}</td>}
+                      {isAdmin && <td>{item.unit_price ? `${(item.qty * item.unit_price).toFixed(2)} €` : '—'}</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -442,7 +442,7 @@ export default function OrderDetail() {
                       </p>
                     </div>
                     <div className="text-right">
-                      {isAdmin && <p className="text-danger font-medium">{Number(d.total_cost).toFixed(2)} лв</p>}
+                      {isAdmin && <p className="text-danger font-medium">{Number(d.total_cost).toFixed(2)} €</p>}
                       {d.decision ? (
                         <span className={`badge ${d.decision==='преработка' ? 'bg-orange-500/20 text-orange-400' : 'bg-gray-500/20 text-gray-400'}`}>
                           {d.decision}

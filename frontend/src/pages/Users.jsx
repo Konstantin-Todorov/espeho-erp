@@ -34,7 +34,7 @@ export default function Users() {
         <div className="table-container">
           <table>
             <thead>
-              <tr><th>Потребител</th><th>Email</th><th>Роля</th><th>Ставка (лв/ч)</th><th>Статус</th><th></th></tr>
+              <tr><th>Потребител</th><th>Email</th><th>Роля</th><th>Ставка (€/ч)</th><th>Статус</th><th></th></tr>
             </thead>
             <tbody>
               {users.map(u => (
@@ -42,7 +42,7 @@ export default function Users() {
                   <td className="font-medium text-white">{u.name}</td>
                   <td className="text-muted">{u.email}</td>
                   <td><RoleBadge role={u.role} /></td>
-                  <td className="text-muted">{u.hourly_rate || 0} лв/ч</td>
+                  <td className="text-muted">{u.hourly_rate || 0} €/ч</td>
                   <td>
                     <span className={`badge ${u.active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                       {u.active ? 'Активен' : 'Неактивен'}
@@ -112,7 +112,7 @@ function UserModal({ open, onClose, user, onSaved }) {
             </select>
           </div>
           <div>
-            <label className="label">Ставка (лв/час)</label>
+            <label className="label">Ставка (€/час)</label>
             <input type="number" className="input" step="0.01" min="0" placeholder="0.00"
               value={form.hourly_rate} onChange={e=>setForm(f=>({...f,hourly_rate:e.target.value}))} />
           </div>

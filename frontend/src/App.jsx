@@ -13,6 +13,7 @@ import ClientDetail from './pages/ClientDetail'
 import Machines from './pages/Machines'
 import Reports from './pages/Reports'
 import Users from './pages/Users'
+import Profile from './pages/Profile'
 import Spinner from './components/ui/Spinner'
 
 function ProtectedRoute({ children, roles }) {
@@ -44,6 +45,7 @@ function AppRoutes() {
         <Route path="machines" element={<ProtectedRoute roles={['admin','production']}><Machines /></ProtectedRoute>} />
         <Route path="reports" element={<ProtectedRoute roles={['admin','office']}><Reports /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute roles={['admin']}><Users /></ProtectedRoute>} />
+        <Route path="profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

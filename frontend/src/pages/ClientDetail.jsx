@@ -260,7 +260,7 @@ export default function ClientDetail() {
                         {o.deadline ? format(parseISO(o.deadline), 'd MMM yyyy', { locale: bg }) : '—'}
                       </td>
                       <td className="text-muted">
-                        {o.sale_price ? `${Number(o.sale_price).toLocaleString()} лв` : '—'}
+                        {o.sale_price ? `${Number(o.sale_price).toLocaleString()} €` : '—'}
                       </td>
                       <td className="text-muted text-xs">
                         {format(parseISO(o.created_at), 'd MMM yyyy', { locale: bg })}
@@ -288,13 +288,13 @@ export default function ClientDetail() {
                   <div>
                     <p className="text-muted text-xs uppercase tracking-wide">Общ приход</p>
                     <p className="text-2xl font-bold text-green-400 mt-0.5">
-                      {totalRevenue.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} лв
+                      {totalRevenue.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} €
                     </p>
                   </div>
                   <div>
                     <p className="text-muted text-xs uppercase tracking-wide">Средна поръчка</p>
                     <p className="text-xl font-bold text-white mt-0.5">
-                      {avgValue.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} лв
+                      {avgValue.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} €
                     </p>
                   </div>
                 </>
