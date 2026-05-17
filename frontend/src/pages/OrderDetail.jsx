@@ -1,0 +1,407 @@
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import api from '../api/axios'
+import { useAuth } from '../context/AuthContext'
+import { OrderStatusBadge, StageStatusBadge, UrgentBadge } from '../components/ui/StatusBadge'
+import { PageLoader } from '../components/ui/Spinner'
+import Modal, { ConfirmDialog } from '../components/ui/Modal'
+import toast from 'react-hot-toast'
+import { format, parseISO } from 'date-fns'
+import { bg } from 'date-fns/locale'
+
+const STATUS_FLOW = {
+  'НОВА':['МАТЕРИАЛИ','ОТКАЗАНА'],
+  'МАТЕРИАЛИ':['ПРОИЗВОДСТВО'],
+  'ПРОИЗВОДСТВО':['ГОТОВА'],
+  'ГОТОВА':['ДОСТАВЕНА'],
+  'ДОСТАВЕНА':[],'ОТКАЗАНА':[],
+}
+
+function CostCard({ costs, salePrice, isAdmin }) {
+  if (!costs) return null
+  const margin = salePrice ? salePrice - costs.total_cost : null
+  const marginPct = salePrice && costs.total_cost ? ((salePrice - costs.total_cost) / salePrice * 100).toFixed(1) : null
+
+  return (
+    <div className="card">
+      <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Себестойност</h3>
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-muted">Материали</span>
+          <span className="text-white font-medium">{Number(costs.material_cost).toFixed(2)} лв</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted">Труд</span>
+          <span className="text-white font-medium">{Number(costs.labor_cost).toFixed(2)} лв</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted">Машини</span>
+          <span className="text-white font-medium">{Number(costs.machine_cost).toFixed(2)} лв</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted">Режийни ({costs.overhead_pct}%)</span>
+          <span className="text-white font-medium">{Number(costs.overhead_cost).toFixed(2)} лв</span>
+        </div>
+        <div className="border-t border-border pt-2 flex justify-between font-bold">
+          <span className="text-gray-200">Себестойност</span>
+          <span className="text-white">{Number(costs.total_cost).toFixed(2)} лв</span>
+        </div>
+        {isAdmin && salePrice && (
+          <>
+            <div className="flex justify-between">
+              <span className="text-muted">Продажна цена</span>
+              <span className="text-white font-medium">{Number(salePrice).toFixed(2)} лв</span>
+            </div>
+            <div className={`flex justify-between font-bold border-t border-border pt-2 ${margin > 0 ? 'text-green-400' : 'text-danger'}`}>
+              <span>Марж</span>
+              <span>{margin?.toFixed(2)} лв ({marginPct}%)</span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function LogLaborModal({ open, onClose, orderId, stages, onLogged }) {
+  const [form, setForm] = useState({ stage_id: '', minutes: '', notes: '' })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async e => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await api.post('/production/labor', { order_id: orderId, ...form, minutes: +form.minutes })
+      toast.success('Трудът е записан')
+      onLogged()
+      onClose()
+      setForm({ stage_id: '', minutes: '', notes: '' })
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Грешка')
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Запиши отработено време" size="sm">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="label">Производствен етап</label>
+          <select className="select" value={form.stage_id} onChange={e=>setForm(f=>({...f,stage_id:e.target.value}))}>
+            <option value="">-- Без етап --</option>
+            {stages.map(s => <option key={s.id} value={s.id}>{s.stage_name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Минути *</label>
+          <input type="number" className="input" min="1" placeholder="60" value={form.minutes}
+            onChange={e=>setForm(f=>({...f,minutes:e.target.value}))} required />
+        </div>
+        <div>
+          <label className="label">Бележка</label>
+          <input className="input" value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} />
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
+          <button type="submit" className="btn-primary" disabled={loading}>Запиши</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+export default function OrderDetail() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const { user, isAdmin, isProduction } = useAuth()
+  const [order, setOrder] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [laborOpen, setLaborOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('stages')
+
+  const fetchOrder = async () => {
+    try {
+      const { data } = await api.get(`/orders/${id}`)
+      setOrder(data)
+    } catch {
+      toast.error('Поръчката не е намерена')
+      navigate('/orders')
+    } finally { setLoading(false) }
+  }
+
+  useEffect(() => { fetchOrder() }, [id])
+
+  const advanceStatus = async status => {
+    try {
+      await api.patch(`/orders/${id}/status`, { status })
+      toast.success(`Статусът е обновен → ${status}`)
+      fetchOrder()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Грешка')
+    }
+  }
+
+  const updateStage = async (stageId, status) => {
+    try {
+      await api.patch(`/production/stages/${stageId}`, { status })
+      toast.success(`Етапът е обновен`)
+      fetchOrder()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Грешка')
+    }
+  }
+
+  if (loading) return <PageLoader />
+  if (!order) return null
+
+  const nextStatuses = STATUS_FLOW[order.status] || []
+  const isOverdue = order.deadline && new Date(order.deadline) < new Date() && !['ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА'].includes(order.status)
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Link to="/orders" className="text-muted hover:text-white text-sm">← Поръчки</Link>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-white">Поръчка #{order.order_number}</h1>
+            <OrderStatusBadge status={order.status} />
+            {order.is_urgent && <UrgentBadge />}
+            {isOverdue && <span className="badge bg-red-500/20 text-red-400 border border-red-500/30">⚠ Просрочена</span>}
+          </div>
+          <p className="text-muted text-sm mt-1">
+            {order.client_name} · {order.order_type} · Създадена от {order.created_by_name}
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {isProduction && order.status === 'ПРОИЗВОДСТВО' && (
+            <button className="btn-primary" onClick={() => setLaborOpen(true)}>
+              + Запиши труд
+            </button>
+          )}
+          {nextStatuses.map(s => (
+            <button key={s} className={s === 'ОТКАЗАНА' ? 'btn-danger' : 'btn-primary'} onClick={() => advanceStatus(s)}>
+              → {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main content */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Info */}
+          <div className="card grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="text-muted text-xs uppercase tracking-wide">Клиент</p>
+              <p className="text-white font-medium mt-0.5">{order.client_name}</p>
+              {order.client_phone && <p className="text-muted">{order.client_phone}</p>}
+            </div>
+            <div>
+              <p className="text-muted text-xs uppercase tracking-wide">Краен срок</p>
+              <p className={`font-medium mt-0.5 ${isOverdue ? 'text-danger' : 'text-white'}`}>
+                {order.deadline ? format(parseISO(order.deadline), 'd MMMM yyyy', { locale: bg }) : '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-muted text-xs uppercase tracking-wide">Тип</p>
+              <p className="text-white font-medium mt-0.5 capitalize">{order.order_type}</p>
+            </div>
+            {order.notes && (
+              <div className="col-span-full">
+                <p className="text-muted text-xs uppercase tracking-wide">Бележки</p>
+                <p className="text-gray-300 mt-0.5">{order.notes}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-border gap-1">
+            {['stages','items','defects','labor','files'].map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px
+                  ${activeTab===tab ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-white'}`}>
+                {{ stages:'Производство', items:'Артикули', defects:'Брак', labor:'Труд', files:'Файлове' }[tab]}
+                {tab === 'defects' && order.defects?.length > 0 && (
+                  <span className="ml-1 badge bg-red-500/20 text-red-400 text-xs">{order.defects.length}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Stages tab */}
+          {activeTab === 'stages' && (
+            <div className="space-y-2">
+              {order.stages.map((stage, i) => (
+                <div key={stage.id} className={`card flex items-center justify-between gap-4
+                  ${stage.status === 'В_ПРОЦЕС' ? 'border-orange-500/40' : ''}
+                  ${stage.status === 'ГОТОВ' ? 'border-green-500/30' : ''}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0
+                      ${stage.status==='ГОТОВ' ? 'bg-green-500/20 text-green-400' :
+                        stage.status==='В_ПРОЦЕС' ? 'bg-orange-500/20 text-orange-400' :
+                        'bg-border text-muted'}`}>
+                      {stage.status === 'ГОТОВ' ? '✓' : i + 1}
+                    </div>
+                    <div>
+                      <p className="font-medium text-white">{stage.stage_name}</p>
+                      <p className="text-xs text-muted">
+                        {stage.worker_name && `${stage.worker_name} · `}
+                        {stage.started_at && `Начало: ${format(parseISO(stage.started_at), 'HH:mm d MMM', { locale: bg })}`}
+                        {stage.completed_at && ` · Край: ${format(parseISO(stage.completed_at), 'HH:mm d MMM', { locale: bg })}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <StageStatusBadge status={stage.status} />
+                    {isProduction && order.status === 'ПРОИЗВОДСТВО' && (
+                      <>
+                        {stage.status === 'ЧАКАЩ' && (
+                          <button className="btn-secondary text-xs py-1" onClick={() => updateStage(stage.id, 'В_ПРОЦЕС')}>
+                            Започни
+                          </button>
+                        )}
+                        {stage.status === 'В_ПРОЦЕС' && (
+                          <button className="btn-primary text-xs py-1" onClick={() => updateStage(stage.id, 'ГОТОВ')}>
+                            Завърши ✓
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Items tab */}
+          {activeTab === 'items' && (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr><th>Описание</th><th>Размер</th><th>Бр</th>{(isAdmin) && <th>Ед. цена</th>}{isAdmin && <th>Сума</th>}</tr>
+                </thead>
+                <tbody>
+                  {order.items.map(item => (
+                    <tr key={item.id}>
+                      <td>{item.product_desc}</td>
+                      <td className="text-muted">{item.width && item.height ? `${item.width}×${item.height} мм` : '—'}</td>
+                      <td>{item.qty}</td>
+                      {isAdmin && <td>{item.unit_price ? `${item.unit_price} лв` : '—'}</td>}
+                      {isAdmin && <td>{item.unit_price ? `${(item.qty * item.unit_price).toFixed(2)} лв` : '—'}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Defects tab */}
+          {activeTab === 'defects' && (
+            <div className="space-y-3">
+              {order.defects.length === 0 ? (
+                <div className="card text-center py-8 text-muted">Няма регистриран брак</div>
+              ) : order.defects.map(d => (
+                <div key={d.id} className="card border-red-500/20">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium text-white">{d.cause_type.replace('_',' ')}</p>
+                      <p className="text-sm text-muted">{d.cause_notes}</p>
+                      <p className="text-xs text-muted mt-1">
+                        {d.worker_name} · {d.stage_name && `${d.stage_name} · `}
+                        {format(parseISO(d.created_at), 'd MMM yyyy HH:mm', { locale: bg })}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      {isAdmin && <p className="text-danger font-medium">{Number(d.total_cost).toFixed(2)} лв</p>}
+                      {d.decision ? (
+                        <span className={`badge ${d.decision==='преработка' ? 'bg-orange-500/20 text-orange-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                          {d.decision}
+                        </span>
+                      ) : (
+                        <span className="badge bg-red-500/20 text-red-400">Нерешен</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {isProduction && (
+                <Link to={`/defects?order_id=${order.id}`} className="btn-secondary w-full justify-center">
+                  + Регистрирай брак
+                </Link>
+              )}
+            </div>
+          )}
+
+          {/* Labor tab */}
+          {activeTab === 'labor' && (
+            <div className="table-container">
+              <table>
+                <thead><tr><th>Работник</th><th>Етап</th><th>Минути</th><th>Дата</th></tr></thead>
+                <tbody>
+                  {order.labor.length === 0 && (
+                    <tr><td colSpan={4} className="text-center py-8 text-muted">Няма записан труд</td></tr>
+                  )}
+                  {order.labor.map(l => (
+                    <tr key={l.id}>
+                      <td>{l.worker_name}</td>
+                      <td className="text-muted">{l.stage_name || '—'}</td>
+                      <td>{l.minutes} мин</td>
+                      <td className="text-muted text-xs">{format(parseISO(l.logged_at), 'd MMM HH:mm', { locale: bg })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Files tab */}
+          {activeTab === 'files' && (
+            <div className="space-y-2">
+              {order.files.length === 0 && (
+                <div className="card text-center py-8 text-muted">Няма прикачени файлове</div>
+              )}
+              {order.files.map(f => (
+                <div key={f.id} className="card flex items-center justify-between">
+                  <div>
+                    <p className="text-white font-medium">{f.original_name}</p>
+                    <p className="text-xs text-muted">{f.uploaded_by_name} · {format(parseISO(f.created_at), 'd MMM yyyy', { locale: bg })}</p>
+                  </div>
+                  <a href={`/api/files/download/${f.id}`} className="btn-secondary text-xs py-1">⬇ Изтегли</a>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-4">
+          {isAdmin && <CostCard costs={order.costs} salePrice={order.sale_price} isAdmin={isAdmin} />}
+
+          {/* Quick info */}
+          <div className="card text-sm space-y-2">
+            <p className="text-muted text-xs uppercase tracking-wide">Информация</p>
+            <div className="flex justify-between">
+              <span className="text-muted">Статус</span>
+              <OrderStatusBadge status={order.status} />
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted">Канал</span>
+              <span className="text-gray-300">{order.source}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted">Брак записи</span>
+              <span className={order.defects?.length > 0 ? 'text-danger font-medium' : 'text-muted'}>
+                {order.defects?.length || 0}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <LogLaborModal open={laborOpen} onClose={() => setLaborOpen(false)}
+        orderId={id} stages={order.stages} onLogged={fetchOrder} />
+    </div>
+  )
+}
