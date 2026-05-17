@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
@@ -8,7 +8,7 @@ import { bg } from 'date-fns/locale'
 const TYPE_ICONS = {
   order_ready:      '✅',
   order_production: '⚙️',
-  order_cancelled:  '✗',
+  order_cancelled:  '❌',
   order_delivered:  '🚚',
   low_stock:        '📦',
   overdue:          '⚠️',
@@ -16,12 +16,12 @@ const TYPE_ICONS = {
 }
 
 export default function NotificationBell() {
-  const [open, setOpen]     = useState(false)
+  const [open, setOpen]          = useState(false)
   const [notifications, setNots] = useState([])
-  const [unread, setUnread] = useState(0)
-  const [pos, setPos]       = useState({ top: 0, right: 16 })
-  const btnRef              = useRef(null)
-  const navigate            = useNavigate()
+  const [unread, setUnread]      = useState(0)
+  const [pos, setPos]            = useState({ top: 0, left: 0 })
+  const btnRef                   = useRef(null)
+  const navigate                 = useNavigate()
 
   const fetchNots = useCallback(async () => {
     try {
@@ -41,7 +41,7 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!open) return
     const handler = e => {
-      if (btnRef.current && btnRef.current.contains(e.target)) return
+      if (btnRef.current?.contains(e.target)) return
       setOpen(false)
     }
     document.addEventListener('mousedown', handler)
@@ -51,10 +51,10 @@ export default function NotificationBell() {
   const openDropdown = () => {
     if (btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect()
-      setPos({
-        top: rect.bottom + 8,
-        right: Math.max(8, window.innerWidth - rect.right),
-      })
+      const dropW = 320
+      // Align left edge with button's left edge, but clamp so it doesn't overflow right
+      const left = Math.min(rect.left, window.innerWidth - dropW - 8)
+      setPos({ top: rect.bottom + 8, left: Math.max(8, left) })
     }
     setOpen(o => !o)
   }
@@ -79,24 +79,28 @@ export default function NotificationBell() {
 
   const dropdown = open && (
     <div
-      style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
-      className="w-80 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden"
+      style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999, width: 320 }}
+      className="bg-surface border border-border rounded-xl shadow-2xl overflow-hidden"
     >
+      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <span className="font-semibold text-sm text-white">Известия</span>
         <div className="flex items-center gap-3">
           {unread > 0 && (
             <button onClick={markAllRead} className="text-xs text-accent hover:underline">
-              Маркирай всички
+              Всички прочетени
             </button>
           )}
-          <Link to="/notifications" onClick={() => setOpen(false)}
-            className="text-xs text-muted hover:text-white transition-colors">
-            Всички →
-          </Link>
+          <button
+            onClick={() => { setOpen(false); navigate('/notifications') }}
+            className="text-xs text-muted hover:text-white transition-colors"
+          >
+            Виж всички →
+          </button>
         </div>
       </div>
 
+      {/* List */}
       <div className="max-h-96 overflow-y-auto divide-y divide-border/50">
         {notifications.length === 0 ? (
           <div className="text-center py-8 text-muted text-sm">

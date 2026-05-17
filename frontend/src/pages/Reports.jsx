@@ -212,11 +212,11 @@ export default function Reports() {
               <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">По месец</h2>
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={data.monthly} margin={{ left:-10, right:0, top:0, bottom:0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#252a3a" />
-                  <XAxis dataKey="month" tick={{ fill:'#6b7280', fontSize:11 }}
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                  <XAxis dataKey="month" tick={{ fill:'var(--chart-tick)', fontSize:11 }}
                     tickFormatter={d => format(parseISO(d), 'MMM yy', { locale: bg })} />
-                  <YAxis tick={{ fill:'#6b7280', fontSize:11 }} />
-                  <Tooltip contentStyle={{ background:'#181c27', border:'1px solid #252a3a', borderRadius:8 }}
+                  <YAxis tick={{ fill:'var(--chart-tick)', fontSize:11 }} />
+                  <Tooltip contentStyle={{ background:'var(--chart-bg)', border:'1px solid var(--chart-border)', borderRadius:8 }}
                     formatter={v => [`${Number(v).toFixed(2)} €`]} />
                   <Legend />
                   <Bar dataKey="revenue" name="Приход"  fill="#22c55e" radius={[4,4,0,0]} />
@@ -344,10 +344,10 @@ export default function Reports() {
               <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Топ клиенти по приход</h3>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={data.slice(0,10)} layout="vertical" margin={{ left: 80, right: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#252a3a" />
-                  <XAxis type="number" tick={{ fill:'#6b7280', fontSize:11 }} tickFormatter={v => `${v}€`} />
-                  <YAxis type="category" dataKey="name" tick={{ fill:'#9ca3af', fontSize:11 }} width={80} />
-                  <Tooltip contentStyle={{ background:'#181c27', border:'1px solid #252a3a', borderRadius:8 }}
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                  <XAxis type="number" tick={{ fill:'var(--chart-tick)', fontSize:11 }} tickFormatter={v => `${v}€`} />
+                  <YAxis type="category" dataKey="name" tick={{ fill:'var(--chart-tick-y)', fontSize:11 }} width={80} />
+                  <Tooltip contentStyle={{ background:'var(--chart-bg)', border:'1px solid var(--chart-border)', borderRadius:8 }}
                     formatter={v => [`${Number(v).toFixed(2)} €`]} />
                   <Bar dataKey="total_revenue" name="Приход" fill="#3b82f6" radius={[0,4,4,0]} />
                 </BarChart>

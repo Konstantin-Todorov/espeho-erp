@@ -23,15 +23,15 @@ router.post('/seed-demo', async (req, res) => {
 
     // ── Suppliers ──
     const s1 = await client.query(`
-      INSERT INTO suppliers (name, contact_person, phone, email, address, notes)
+      INSERT INTO suppliers (name, contact, phone, email, address, notes)
       VALUES ('ГласИмпорт ЕООД','Иван Петров','+359 32 123 456','ivan@glasimport.bg','бул. Марица 14, Пловдив','Основен доставчик на флоат стъкло')
       RETURNING id`);
     const s2 = await client.query(`
-      INSERT INTO suppliers (name, contact_person, phone, email, address, notes)
+      INSERT INTO suppliers (name, contact, phone, email, address, notes)
       VALUES ('СтъклоПлюс АД','Мария Иванова','+359 2 987 6543','m.ivanova@stekloplus.bg','ул. Индустриална 7, София','Доставчик на специализирани стъкла')
       RETURNING id`);
     const s3 = await client.query(`
-      INSERT INTO suppliers (name, contact_person, phone, email, address)
+      INSERT INTO suppliers (name, contact, phone, email, address)
       VALUES ('EuroGlass SRL','Andrei Popescu','+40 72 345 6789','a.popescu@euroglass.ro','Str. Industriei 22, București')
       RETURNING id`);
 

@@ -267,7 +267,7 @@ function AdminDashboard() {
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{ background:'#181c27', border:'1px solid #252a3a', borderRadius:8, fontSize:12 }}
+                contentStyle={{ background:'var(--chart-bg)', border:'1px solid var(--chart-border)', borderRadius:8, fontSize:12 }}
                 formatter={(val, name) => [`${val} поръчки`, name]}
               />
             </PieChart>
@@ -290,12 +290,12 @@ function AdminDashboard() {
           <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Поръчки последните 30 дни</h2>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.ordersByDay} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#252a3a" />
-              <XAxis dataKey="day" tick={{ fill:'#6b7280', fontSize:11 }}
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+              <XAxis dataKey="day" tick={{ fill:'var(--chart-tick)', fontSize:11 }}
                 tickFormatter={d => format(parseISO(d), 'd MMM', { locale: bg })} />
-              <YAxis tick={{ fill:'#6b7280', fontSize:11 }} allowDecimals={false} />
+              <YAxis tick={{ fill:'var(--chart-tick)', fontSize:11 }} allowDecimals={false} />
               <Tooltip
-                contentStyle={{ background:'#181c27', border:'1px solid #252a3a', borderRadius:8 }}
+                contentStyle={{ background:'var(--chart-bg)', border:'1px solid var(--chart-border)', borderRadius:8 }}
                 labelFormatter={d => format(parseISO(d), 'd MMMM', { locale: bg })}
               />
               <Bar dataKey="count" fill="#3b82f6" radius={[4,4,0,0]} name="Поръчки" />

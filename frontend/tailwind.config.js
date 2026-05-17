@@ -4,14 +4,14 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg:      '#0f1117',
-        surface: '#181c27',
-        border:  '#252a3a',
-        muted:   '#6b7280',
-        accent:  '#3b82f6',
-        success: '#22c55e',
-        warning: '#f59e0b',
-        danger:  '#ef4444',
+        bg:      'rgb(var(--rgb-bg)      / <alpha-value>)',
+        surface: 'rgb(var(--rgb-surface) / <alpha-value>)',
+        border:  'rgb(var(--rgb-border)  / <alpha-value>)',
+        muted:   'rgb(var(--rgb-muted)   / <alpha-value>)',
+        accent:  'rgb(59  130 246 / <alpha-value>)',
+        success: 'rgb(34  197 94  / <alpha-value>)',
+        warning: 'rgb(245 158 11  / <alpha-value>)',
+        danger:  'rgb(239 68  68  / <alpha-value>)',
       },
       fontFamily: {
         sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
