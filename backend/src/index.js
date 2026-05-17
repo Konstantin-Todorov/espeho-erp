@@ -34,6 +34,7 @@ app.use('/api/quotations',     require('./routes/quotations'));
 app.use('/api/quality',        require('./routes/quality'));
 app.use('/api/deliveries',     require('./routes/deliveries'));
 app.use('/api/suppliers',      require('./routes/suppliers'));
+app.use('/api/admin',          require('./routes/admin'));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -145,12 +146,20 @@ async function checkOverdueOrders() {
 
 // ── Start ──────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🏭 ЕСПЕХО ERP backend started on port ${PORT}`);
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  // Check overdue orders and low stock every hour
-  checkOverdueOrders();
-  checkLowStock();
-  setInterval(checkOverdueOrders, 60 * 60 * 1000);
-  setInterval(checkLowStock, 60 * 60 * 1000);
-});
+const runMigrations = require('./db/migrate');
+
+runMigrations()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`🏭 ЕСПЕХО ERP backend started on port ${PORT}`);
+      console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+      checkOverdueOrders();
+      checkLowStock();
+      setInterval(checkOverdueOrders, 60 * 60 * 1000);
+      setInterval(checkLowStock, 60 * 60 * 1000);
+    });
+  })
+  .catch(err => {
+    console.error('❌ Migrations failed — server not started:', err.message);
+    process.exit(1);
+  });

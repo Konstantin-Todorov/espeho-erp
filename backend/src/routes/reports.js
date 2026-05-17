@@ -65,6 +65,17 @@ router.get('/dashboard', async (req, res) => {
       FROM orders WHERE status='ДОСТАВЕНА' AND created_at >= NOW() - INTERVAL '12 weeks'
       GROUP BY 1 ORDER BY 1`);
 
+    // Quotations + deliveries counts (tables may not exist yet → default 0)
+    let quotationsPending = 0, deliveriesPending = 0;
+    try {
+      const [qRes, dRes] = await Promise.all([
+        pool.query("SELECT COUNT(*)::int AS c FROM quotations WHERE status IN ('DRAFT','SENT')"),
+        pool.query("SELECT COUNT(*)::int AS c FROM deliveries WHERE status IN ('PENDING','IN_TRANSIT')"),
+      ]);
+      quotationsPending = qRes.rows[0].c;
+      deliveriesPending = dRes.rows[0].c;
+    } catch { /* tables not yet migrated */ }
+
     res.json({
       orderStats: orderStats.rows,
       revenue: revenueStats.rows[0],
@@ -75,6 +86,8 @@ router.get('/dashboard', async (req, res) => {
       urgentActive: urgentActive.rows[0],
       ordersByDay: ordersByDay.rows,
       revenueByWeek: revenueByWeek.rows,
+      quotationsPending,
+      deliveriesPending,
     });
   } catch (err) {
     console.error(err);

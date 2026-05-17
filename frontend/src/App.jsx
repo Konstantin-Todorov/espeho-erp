@@ -20,6 +20,7 @@ import TrackOrder from './pages/TrackOrder'
 import Quotations from './pages/Quotations'
 import Deliveries from './pages/Deliveries'
 import Suppliers from './pages/Suppliers'
+import Notifications from './pages/Notifications'
 import Spinner from './components/ui/Spinner'
 
 function ProtectedRoute({ children, roles }) {
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route path="profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="guide" element={<ProtectedRoute><Guide /></ProtectedRoute>} />
         <Route path="calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+        <Route path="notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
       </Route>
       <Route path="/track/:token" element={<TrackOrder />} />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -5,19 +5,25 @@ const auth = require('../middleware/auth');
 const router = express.Router();
 router.use(auth);
 
-// GET /api/notifications — get user's notifications (latest 50)
+// GET /api/notifications — get user's notifications
 router.get('/', async (req, res) => {
+  const { page = 1, limit = 50, unread_only } = req.query;
+  const offset = (page - 1) * limit;
+  const readCond = unread_only === 'true' ? 'AND read_at IS NULL' : '';
   try {
     const { rows } = await pool.query(
       `SELECT id, type, title, body, link, order_id, read_at, created_at
        FROM notifications
-       WHERE user_id = $1
+       WHERE user_id = $1 ${readCond}
        ORDER BY created_at DESC
-       LIMIT 50`,
-      [req.user.id]
+       LIMIT $2 OFFSET $3`,
+      [req.user.id, limit, offset]
     );
-    const unread = rows.filter(n => !n.read_at).length;
-    res.json({ notifications: rows, unread });
+    const { rows: cnt } = await pool.query(
+      `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE read_at IS NULL)::int AS unread
+       FROM notifications WHERE user_id=$1`, [req.user.id]
+    );
+    res.json({ notifications: rows, unread: cnt[0].unread, total: cnt[0].total });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Грешка на сървъра' });

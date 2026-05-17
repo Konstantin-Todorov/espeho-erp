@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
@@ -15,15 +16,16 @@ const TYPE_ICONS = {
 }
 
 export default function NotificationBell() {
-  const [open, setOpen]           = useState(false)
-  const [notifications, setNots]  = useState([])
-  const [unread, setUnread]       = useState(0)
-  const panelRef                  = useRef(null)
-  const navigate                  = useNavigate()
+  const [open, setOpen]     = useState(false)
+  const [notifications, setNots] = useState([])
+  const [unread, setUnread] = useState(0)
+  const [pos, setPos]       = useState({ top: 0, right: 16 })
+  const btnRef              = useRef(null)
+  const navigate            = useNavigate()
 
   const fetchNots = useCallback(async () => {
     try {
-      const { data } = await api.get('/notifications')
+      const { data } = await api.get('/notifications?limit=30')
       setNots(data.notifications)
       setUnread(data.unread)
     } catch { /* silent */ }
@@ -39,11 +41,23 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!open) return
     const handler = e => {
-      if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false)
+      if (btnRef.current && btnRef.current.contains(e.target)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
+
+  const openDropdown = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({
+        top: rect.bottom + 8,
+        right: Math.max(8, window.innerWidth - rect.right),
+      })
+    }
+    setOpen(o => !o)
+  }
 
   const markRead = async (id) => {
     await api.patch(`/notifications/${id}/read`).catch(() => {})
@@ -63,10 +77,64 @@ export default function NotificationBell() {
     if (n.link) navigate(n.link)
   }
 
+  const dropdown = open && (
+    <div
+      style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
+      className="w-80 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden"
+    >
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <span className="font-semibold text-sm text-white">Известия</span>
+        <div className="flex items-center gap-3">
+          {unread > 0 && (
+            <button onClick={markAllRead} className="text-xs text-accent hover:underline">
+              Маркирай всички
+            </button>
+          )}
+          <Link to="/notifications" onClick={() => setOpen(false)}
+            className="text-xs text-muted hover:text-white transition-colors">
+            Всички →
+          </Link>
+        </div>
+      </div>
+
+      <div className="max-h-96 overflow-y-auto divide-y divide-border/50">
+        {notifications.length === 0 ? (
+          <div className="text-center py-8 text-muted text-sm">
+            <div className="text-2xl mb-2">🔔</div>
+            Няма известия
+          </div>
+        ) : (
+          notifications.map(n => (
+            <button
+              key={n.id}
+              onClick={() => handleClick(n)}
+              className={`w-full text-left px-4 py-3 hover:bg-border/30 transition-colors flex gap-3 items-start ${!n.read_at ? 'bg-accent/5' : ''}`}
+            >
+              <span className="text-lg flex-shrink-0 mt-0.5">{TYPE_ICONS[n.type] || '🔔'}</span>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm leading-tight ${!n.read_at ? 'text-white font-medium' : 'text-gray-300'}`}>
+                  {n.title}
+                </p>
+                {n.body && <p className="text-xs text-muted mt-0.5 truncate">{n.body}</p>}
+                <p className="text-xs text-muted/70 mt-1">
+                  {formatDistanceToNow(parseISO(n.created_at), { addSuffix: true, locale: bg })}
+                </p>
+              </div>
+              {!n.read_at && (
+                <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0 mt-1.5" />
+              )}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  )
+
   return (
-    <div className="relative" ref={panelRef}>
+    <>
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={btnRef}
+        onClick={openDropdown}
         className="relative p-2 rounded-lg hover:bg-border transition-colors text-muted hover:text-white"
         title="Известия"
       >
@@ -82,49 +150,7 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-surface border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <span className="font-semibold text-sm text-white">Известия</span>
-            {unread > 0 && (
-              <button onClick={markAllRead} className="text-xs text-accent hover:underline">
-                Маркирай всички
-              </button>
-            )}
-          </div>
-
-          <div className="max-h-96 overflow-y-auto divide-y divide-border/50">
-            {notifications.length === 0 ? (
-              <div className="text-center py-8 text-muted text-sm">
-                <div className="text-2xl mb-2">🔔</div>
-                Няма известия
-              </div>
-            ) : (
-              notifications.map(n => (
-                <button
-                  key={n.id}
-                  onClick={() => handleClick(n)}
-                  className={`w-full text-left px-4 py-3 hover:bg-border/30 transition-colors flex gap-3 items-start ${!n.read_at ? 'bg-accent/5' : ''}`}
-                >
-                  <span className="text-lg flex-shrink-0 mt-0.5">{TYPE_ICONS[n.type] || '🔔'}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm leading-tight ${!n.read_at ? 'text-white font-medium' : 'text-gray-300'}`}>
-                      {n.title}
-                    </p>
-                    {n.body && <p className="text-xs text-muted mt-0.5 truncate">{n.body}</p>}
-                    <p className="text-xs text-muted/70 mt-1">
-                      {formatDistanceToNow(parseISO(n.created_at), { addSuffix: true, locale: bg })}
-                    </p>
-                  </div>
-                  {!n.read_at && (
-                    <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0 mt-1.5" />
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+      {createPortal(dropdown, document.body)}
+    </>
   )
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
@@ -104,7 +105,9 @@ function ProductionDashboard() {
 function AdminDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [seeding, setSeeding] = useState(false)
   const { isAdmin } = useAuth()
+  const navigate = useNavigate()
 
   useEffect(() => {
     api.get('/reports/dashboard')
@@ -137,7 +140,27 @@ function AdminDashboard() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white">Дашборд</h1>
-        <p className="text-sm text-muted">{format(new Date(), 'EEEE, d MMMM yyyy', { locale: bg })}</p>
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <button
+              onClick={async () => {
+                setSeeding(true)
+                try {
+                  const { data: r } = await api.post('/admin/seed-demo')
+                  toast.success(r.message)
+                  api.get('/reports/dashboard').then(res => setData(res.data))
+                } catch (e) {
+                  toast.error(e.response?.data?.error || 'Грешка при демо данни')
+                } finally { setSeeding(false) }
+              }}
+              disabled={seeding}
+              className="btn-secondary text-xs px-3 py-1.5"
+            >
+              {seeding ? '...' : '🌱 Демо данни'}
+            </button>
+          )}
+          <p className="text-sm text-muted">{format(new Date(), 'EEEE, d MMMM yyyy', { locale: bg })}</p>
+        </div>
       </div>
 
       {/* Row 1 — financial KPIs */}
@@ -216,6 +239,16 @@ function AdminDashboard() {
               color={data.lowStockCount > 0 ? 'text-yellow-400' : 'text-muted'}
               tooltip="Материали в склада под минималния праг — трябва да се поръчат"
               icon="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+            />
+            <StatCard label="Оферти чакащи" value={data.quotationsPending ?? 0}
+              color={(data.quotationsPending ?? 0) > 0 ? 'text-accent' : 'text-muted'}
+              tooltip="Оферти в статус ЧЕРНОВА или ИЗПРАТЕНА, чакащи отговор от клиента"
+              icon="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
+            <StatCard label="Доставки планирани" value={data.deliveriesPending ?? 0}
+              color={(data.deliveriesPending ?? 0) > 0 ? 'text-blue-400' : 'text-muted'}
+              tooltip="Планирани доставки в статус ЧАКАЩИ или В ДВИЖЕНИЕ"
+              icon="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10h1m8 0H9m4 0h5m-9 0H5m9-10v0a4 4 0 014 4v6"
             />
           </>
         )}

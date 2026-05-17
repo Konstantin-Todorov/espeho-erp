@@ -38,11 +38,10 @@ async function migrate() {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('❌ Migration failed:', err.message);
-    process.exit(1);
+    throw err;
   } finally {
     client.release();
-    await pool.end();
   }
 }
 
-migrate();
+module.exports = migrate;
