@@ -9,7 +9,7 @@ router.use(auth, roleCheck('admin','office'));
 // GET /api/reports/dashboard
 router.get('/dashboard', async (req, res) => {
   try {
-    const [orderStats, revenueStats, prevMonthStats, defectStats, lowStock, recentOrders] = await Promise.all([
+    const [orderStats, revenueStats, prevMonthStats, defectStats, lowStock, recentOrders, urgentActive] = await Promise.all([
       pool.query(`
         SELECT status, COUNT(*)::int AS count
         FROM orders GROUP BY status`),
@@ -41,6 +41,15 @@ router.get('/dashboard', async (req, res) => {
         WHERE o.status NOT IN ('ДОСТАВЕНА','ОТКАЗАНА')
         ORDER BY o.is_urgent DESC, o.deadline ASC NULLS LAST
         LIMIT 10`),
+      pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE deadline < NOW()::date
+            AND status NOT IN ('ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА'))::int AS overdue,
+          COUNT(*) FILTER (WHERE deadline BETWEEN NOW()::date AND (NOW() + INTERVAL '7 days')::date
+            AND status NOT IN ('ДОСТАВЕНА','ОТКАЗАНА'))::int AS due_this_week,
+          COUNT(*) FILTER (WHERE is_urgent = true
+            AND status NOT IN ('ДОСТАВЕНА','ОТКАЗАНА'))::int AS urgent_active
+        FROM orders`),
     ]);
 
     // Orders by day (last 30 days)
@@ -63,6 +72,7 @@ router.get('/dashboard', async (req, res) => {
       defects: defectStats.rows[0],
       lowStockCount: lowStock.rows[0].count,
       recentOrders: recentOrders.rows,
+      urgentActive: urgentActive.rows[0],
       ordersByDay: ordersByDay.rows,
       revenueByWeek: revenueByWeek.rows,
     });
