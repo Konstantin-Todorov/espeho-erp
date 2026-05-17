@@ -289,6 +289,10 @@ export default function OrderDetail() {
   const [laborOpen, setLaborOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('stages')
   const [workers, setWorkers] = useState([])
+  const [comments, setComments] = useState([])
+  const [newComment, setNewComment] = useState('')
+  const [sendingComment, setSendingComment] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
 
   const fetchOrder = async () => {
     try {
@@ -300,12 +304,41 @@ export default function OrderDetail() {
     } finally { setLoading(false) }
   }
 
+  const fetchComments = () => api.get(`/comments/${id}`).then(r => setComments(r.data)).catch(() => {})
+
   useEffect(() => {
     fetchOrder()
+    fetchComments()
     if (isAdmin || user?.role === 'office') {
       api.get('/production/workers').then(r => setWorkers(r.data)).catch(() => {})
     }
   }, [id])
+
+  const sendComment = async () => {
+    if (!newComment.trim()) return
+    setSendingComment(true)
+    try {
+      const { data } = await api.post(`/comments/${id}`, { message: newComment })
+      setComments(c => [...c, data])
+      setNewComment('')
+    } catch { toast.error('Грешка') }
+    finally { setSendingComment(false) }
+  }
+
+  const uploadFile = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploadingFile(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      await api.post(`/files/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      toast.success('Файлът е качен')
+      fetchOrder()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Грешка при качване')
+    } finally { setUploadingFile(false); e.target.value = '' }
+  }
 
   const advanceStatus = async status => {
     try {
@@ -336,9 +369,10 @@ export default function OrderDetail() {
   const TABS = [
     { id: 'stages',   label: 'Производство' },
     { id: 'items',    label: 'Артикули' },
-    { id: 'defects',  label: 'Брак', badge: order.defects?.length },
+    { id: 'comments', label: 'Коментари', badge: comments.length },
+    { id: 'files',    label: 'Файлове', badge: order.files?.length || 0 },
+    { id: 'defects',  label: 'Брак', badge: order.defects?.filter(d => !d.decision).length },
     { id: 'labor',    label: 'Труд' },
-    { id: 'files',    label: 'Файлове' },
     { id: 'history',  label: 'История' },
   ]
 
@@ -576,19 +610,67 @@ export default function OrderDetail() {
             </div>
           )}
 
+          {/* Comments tab */}
+          {activeTab === 'comments' && (
+            <div className="space-y-3">
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {comments.length === 0 && (
+                  <div className="card text-center py-8 text-muted">Няма коментари. Напишете първия.</div>
+                )}
+                {comments.map(c => (
+                  <div key={c.id} className={`flex gap-3 ${c.user_id === user?.id ? 'flex-row-reverse' : ''}`}>
+                    <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent text-sm font-bold flex-shrink-0">
+                      {c.user_name?.[0]}
+                    </div>
+                    <div className={`flex-1 max-w-xs ${c.user_id === user?.id ? 'items-end' : 'items-start'} flex flex-col`}>
+                      <div className={`rounded-2xl px-4 py-2.5 text-sm ${c.user_id === user?.id ? 'bg-accent text-white rounded-tr-sm' : 'bg-surface border border-border text-gray-300 rounded-tl-sm'}`}>
+                        {c.message}
+                      </div>
+                      <p className="text-xs text-muted mt-1 px-1">{c.user_name} · {format(parseISO(c.created_at), 'HH:mm d MMM', { locale: bg })}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  className="input flex-1"
+                  placeholder="Напишете коментар..."
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendComment()}
+                />
+                <button className="btn-primary px-4" onClick={sendComment} disabled={sendingComment || !newComment.trim()}>
+                  {sendingComment ? '...' : 'Изпрати'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Files tab */}
           {activeTab === 'files' && (
             <div className="space-y-2">
+              <label className={`flex items-center justify-center gap-2 border border-dashed border-border rounded-xl py-3 text-sm cursor-pointer hover:border-accent/50 hover:text-white transition-colors text-muted ${uploadingFile ? 'opacity-50 pointer-events-none' : ''}`}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                {uploadingFile ? 'Качва се...' : '+ Прикачи файл (PDF, снимка, чертеж до 20MB)'}
+                <input type="file" className="hidden" onChange={uploadFile} accept=".pdf,.jpg,.jpeg,.png,.dwg,.dxf,.xlsx,.docx" />
+              </label>
               {order.files.length === 0 && (
-                <div className="card text-center py-8 text-muted">Няма прикачени файлове</div>
+                <div className="card text-center py-6 text-muted text-sm">Няма прикачени файлове</div>
               )}
               {order.files.map(f => (
-                <div key={f.id} className="card flex items-center justify-between">
-                  <div>
-                    <p className="text-white font-medium">{f.original_name}</p>
-                    <p className="text-xs text-muted">{f.uploaded_by_name} · {format(parseISO(f.created_at), 'd MMM yyyy', { locale: bg })}</p>
+                <div key={f.id} className="card flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center flex-shrink-0 text-accent text-xs font-bold">
+                      {f.original_name.split('.').pop().toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white font-medium text-sm truncate">{f.original_name}</p>
+                      <p className="text-xs text-muted">{f.uploaded_by_name} · {format(parseISO(f.created_at), 'd MMM yyyy', { locale: bg })} · {(f.file_size/1024).toFixed(0)} KB</p>
+                    </div>
                   </div>
-                  <a href={`/api/files/download/${f.id}`} className="btn-secondary text-xs py-1">⬇ Изтегли</a>
+                  <a href={`/api/files/download/${f.id}`} className="btn-secondary text-xs py-1 flex-shrink-0">⬇ Изтегли</a>
                 </div>
               ))}
             </div>
@@ -619,6 +701,22 @@ export default function OrderDetail() {
               </span>
             </div>
           </div>
+
+          {/* Client tracking link */}
+          {order.tracking_token && (isAdmin || user?.role === 'office') && (
+            <div className="card text-sm">
+              <p className="text-muted text-xs uppercase tracking-wide mb-2">Линк за клиента</p>
+              <p className="text-xs text-gray-400 mb-2">Изпратете на клиента да проследи поръчката</p>
+              <div className="flex gap-2">
+                <input readOnly className="input text-xs flex-1 text-muted"
+                  value={`${window.location.origin}/track/${order.tracking_token}`} />
+                <button className="btn-secondary text-xs py-1 px-2 flex-shrink-0"
+                  onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/track/${order.tracking_token}`); toast.success('Копирано!') }}>
+                  Копирай
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

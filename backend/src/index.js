@@ -27,6 +27,8 @@ app.use('/api/machines',   require('./routes/machines'));
 app.use('/api/reports',    require('./routes/reports'));
 app.use('/api/files',      require('./routes/files'));
 app.use('/api/products',   require('./routes/products'));
+app.use('/api/comments',   require('./routes/comments'));
+app.use('/api/public',     require('./routes/public'));
 
 // Health check
 app.get('/api/health', (req, res) => {
