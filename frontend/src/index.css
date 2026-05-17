@@ -45,6 +45,7 @@
   .input {
     @apply w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-gray-100
            placeholder-muted focus:outline-none focus:border-accent transition-colors;
+    color-scheme: dark;
   }
 
   .select {

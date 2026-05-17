@@ -69,6 +69,36 @@ router.get('/locations', async (req, res) => {
   }
 });
 
+// POST /api/warehouse/locations
+router.post('/locations', roleCheck('admin','warehouse'), async (req, res) => {
+  const { name, description } = req.body;
+  if (!name) return res.status(400).json({ error: 'Името е задължително' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO locations (name, description) VALUES ($1,$2) RETURNING *`,
+      [name, description || null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Грешка при създаване' });
+  }
+});
+
+// PATCH /api/warehouse/locations/:id
+router.patch('/locations/:id', roleCheck('admin','warehouse'), async (req, res) => {
+  const { name, description } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE locations SET name=COALESCE($1,name), description=COALESCE($2,description) WHERE id=$3 RETURNING *`,
+      [name||null, description||null, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Локацията не е намерена' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Грешка при обновяване' });
+  }
+});
+
 // GET /api/warehouse/movements
 router.get('/movements', async (req, res) => {
   const { material_id, order_id, movement_type, from, to, page = 1, limit = 50 } = req.query;
