@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
+const notify = require('../utils/notify');
 
 const router = express.Router();
 router.use(auth);
@@ -217,10 +218,37 @@ router.patch('/:id/status', roleCheck('admin','office','production'), async (req
 
     const { rows: updated } = await pool.query(
       `UPDATE orders SET status=$1::order_status, notes=COALESCE($2,notes),
-       updated_by=$3, updated_at=NOW() WHERE id=$4 RETURNING *`,
+       updated_by=$3, updated_at=NOW() WHERE id=$4 RETURNING *, (SELECT name FROM clients WHERE id=orders.client_id) AS client_name`,
       [status, notes, req.user.id, req.params.id]
     );
-    res.json(updated[0]);
+    const order = updated[0];
+    const link = `/orders/${order.id}`;
+    const num = order.order_number;
+
+    // Fire notifications based on new status
+    if (status === 'ГОТОВА') {
+      await notify({ roles: ['admin','office'], type: 'order_ready',
+        title: `Поръчка ${num} е готова`,
+        body: `Клиент: ${order.client_name} — готова за доставка`,
+        link, orderId: order.id });
+    } else if (status === 'ПРОИЗВОДСТВО') {
+      await notify({ roles: ['production'], type: 'order_production',
+        title: `Нова поръчка в производство: ${num}`,
+        body: `Клиент: ${order.client_name}`,
+        link, orderId: order.id });
+    } else if (status === 'ОТКАЗАНА') {
+      await notify({ roles: ['admin','office'], type: 'order_cancelled',
+        title: `Поръчка ${num} е отказана`,
+        body: `Отказана от ${req.user.name}`,
+        link, orderId: order.id });
+    } else if (status === 'ДОСТАВЕНА') {
+      await notify({ roles: ['admin','office'], type: 'order_delivered',
+        title: `Поръчка ${num} е доставена`,
+        body: `Клиент: ${order.client_name}`,
+        link, orderId: order.id });
+    }
+
+    res.json(order);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Грешка при обновяване на статус' });

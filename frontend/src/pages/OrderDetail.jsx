@@ -9,6 +9,7 @@ import CreatableInput from '../components/ui/CreatableInput'
 import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
+import { printWorkOrder, printDeliveryNote } from '../utils/printOrder'
 
 const COMMON_STAGES = ['Рязане','Миене','Шлайфане','Сглобяване','Заливане','Кантиране','Темпериране','Ламиниране','Контрол качество','Опаковане']
 
@@ -443,6 +444,14 @@ export default function OrderDetail() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <button className="btn-secondary" onClick={() => printWorkOrder(order)} title="Производствен лист">
+            🖨️ Лист
+          </button>
+          {(isAdmin || user?.role === 'office') && (
+            <button className="btn-secondary" onClick={() => printDeliveryNote(order)} title="Доставателна бележка">
+              📄 Бележка
+            </button>
+          )}
           {(isProduction || isAdmin || user?.role === 'office') && order.status === 'ПРОИЗВОДСТВО' && (
             <button className="btn-primary" onClick={() => setLaborOpen(true)}>
               + Запиши работа

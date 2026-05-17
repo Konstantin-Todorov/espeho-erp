@@ -1,6 +1,7 @@
 import { NavLink, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import GlobalSearch from './GlobalSearch'
+import NotificationBell from './NotificationBell'
 import toast from 'react-hot-toast'
 
 const Icon = ({ path }) => (
@@ -39,6 +40,12 @@ const NAV_ITEMS = [
     to: '/warehouse',
     icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
     roles: ['admin','office','warehouse'],
+  },
+  {
+    label: 'Оферти',
+    to: '/quotations',
+    icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+    roles: ['admin','office'],
   },
   {
     label: 'Клиенти',
@@ -110,9 +117,12 @@ export default function Sidebar({ mobile, onClose }) {
         </div>
       </div>
 
-      {/* Global Search */}
-      <div className="py-3 border-b border-border">
-        <GlobalSearch />
+      {/* Global Search + Bell */}
+      <div className="py-3 border-b border-border px-3 flex items-center gap-2">
+        <div className="flex-1">
+          <GlobalSearch />
+        </div>
+        <NotificationBell />
       </div>
 
       {/* Nav */}

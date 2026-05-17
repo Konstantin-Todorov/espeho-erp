@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import LowStockAlert from './LowStockAlert'
+import NotificationBell from './NotificationBell'
 import { useAuth } from '../context/AuthContext'
 
 export default function Layout() {
@@ -35,8 +36,11 @@ export default function Layout() {
             </svg>
           </button>
           <span className="font-bold text-white">ЕСПЕХО ERP</span>
-          <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center text-white text-sm font-bold">
-            {user?.name?.[0] || '?'}
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center text-white text-sm font-bold">
+              {user?.name?.[0] || '?'}
+            </div>
           </div>
         </header>
 
