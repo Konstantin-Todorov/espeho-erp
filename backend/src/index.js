@@ -7,7 +7,7 @@ const app = express();
 
 // ── Middleware ──────────────────────────────────────────────
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.NODE_ENV === 'production' ? true : (process.env.FRONTEND_URL || 'http://localhost:5173'),
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -32,6 +32,14 @@ app.use('/api/products',   require('./routes/products'));
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', system: 'ЕСПЕХО ERP', version: '1.0.0' });
 });
+
+// Serve frontend in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '..', 'public')));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  });
+}
 
 // ── Error handler ──────────────────────────────────────────
 app.use((err, req, res, next) => {

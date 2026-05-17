@@ -87,9 +87,9 @@ export default function Reports() {
       if (!data.monthly || data.monthly.length === 0) return null
       return data.monthly.map(m => ({
         месец: m.month,
-        приход_€: Number(m.revenue || 0).toFixed(2),
-        разходи_€: Number(m.cost || 0).toFixed(2),
-        марж_€: Number(m.margin || 0).toFixed(2),
+        'приход_€': Number(m.revenue || 0).toFixed(2),
+        'разходи_€': Number(m.cost || 0).toFixed(2),
+        'марж_€': Number(m.margin || 0).toFixed(2),
       }))
     }
     if (tab === 'orders') {
@@ -99,8 +99,8 @@ export default function Reports() {
         статус: o.status,
         тип: o.order_type,
         краен_срок: o.deadline || '',
-        приход_€: o.sale_price || '',
-        разход_€: o.total_cost || '',
+        'приход_€': o.sale_price || '',
+        'разход_€': o.total_cost || '',
         марж_процент: o.margin_pct || '',
       }))
     }
@@ -109,7 +109,7 @@ export default function Reports() {
         работник: w.name,
         поръчки: w.orders_worked,
         часове: (w.total_minutes / 60).toFixed(1),
-        разход_труд_€: Number(w.labor_cost).toFixed(2),
+        'разход_труд_€': Number(w.labor_cost).toFixed(2),
         брак: w.defects_caused,
       }))
     }
@@ -119,14 +119,14 @@ export default function Reports() {
         категория: m.category,
         консумирано: Number(m.total_consumed).toFixed(2),
         единица: m.unit,
-        стойност_€: Number(m.total_value).toFixed(2),
+        'стойност_€': Number(m.total_value).toFixed(2),
       }))
     }
     if (tab === 'defects') {
       return data.byCause?.map(c => ({
         причина: c.cause_type,
         брой: c.count,
-        стойност_€: Number(c.total_cost).toFixed(2),
+        'стойност_€': Number(c.total_cost).toFixed(2),
       })) || null
     }
     return null
