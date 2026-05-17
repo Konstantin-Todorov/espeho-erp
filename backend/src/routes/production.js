@@ -11,7 +11,7 @@ router.use(auth);
 router.get('/workers', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, name, role FROM users WHERE is_active=true ORDER BY
+      `SELECT id, name, role FROM users WHERE active=true ORDER BY
          CASE role WHEN 'production' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, name`
     );
     res.json(rows);
