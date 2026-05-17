@@ -7,6 +7,18 @@ const router = express.Router();
 router.use(auth);
 
 // GET /api/production/board — Kanban view
+// GET /api/production/workers — list of production workers (for assignment)
+router.get('/workers', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, role FROM users WHERE role='production' AND is_active=true ORDER BY name`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Грешка на сървъра' });
+  }
+});
+
 router.get('/board', async (req, res) => {
   try {
     const { rows } = await pool.query(`
@@ -74,8 +86,8 @@ router.get('/stages/:orderId', async (req, res) => {
 });
 
 // PATCH /api/production/stages/:id — update stage status
-router.patch('/stages/:id', roleCheck('admin','production'), async (req, res) => {
-  const { status, machine_id, notes } = req.body;
+router.patch('/stages/:id', roleCheck('admin','office','production'), async (req, res) => {
+  const { status, machine_id, notes, assigned_to } = req.body;
   const dbClient = await pool.connect();
   try {
     await dbClient.query('BEGIN');
@@ -99,14 +111,17 @@ router.patch('/stages/:id', roleCheck('admin','production'), async (req, res) =>
       }
     }
 
-    const updates = {
-      status,
-      machine_id: machine_id || stage.machine_id,
-      assigned_to: status === 'В_ПРОЦЕС' ? req.user.id : stage.assigned_to,
-      started_at: status === 'В_ПРОЦЕС' && !stage.started_at ? 'NOW()' : null,
-      completed_at: status === 'ГОТОВ' ? 'NOW()' : null,
-      notes: notes || stage.notes,
-    };
+    // Allow assigning worker without changing status
+    if (assigned_to !== undefined && !status) {
+      const { rows } = await dbClient.query(
+        `UPDATE production_stages SET assigned_to=$1 WHERE id=$2 RETURNING *`,
+        [assigned_to || null, req.params.id]
+      );
+      await dbClient.query('COMMIT');
+      return res.json(rows[0]);
+    }
+
+    const resolvedAssignedTo = status === 'В_ПРОЦЕС' ? req.user.id : (assigned_to ?? stage.assigned_to);
 
     const { rows } = await dbClient.query(
       `UPDATE production_stages SET
@@ -116,7 +131,7 @@ router.patch('/stages/:id', roleCheck('admin','production'), async (req, res) =>
          completed_at=CASE WHEN $5 THEN NOW() ELSE completed_at END,
          notes=COALESCE($6,notes)
        WHERE id=$7 RETURNING *`,
-      [status, machine_id, updates.assigned_to,
+      [status, machine_id, resolvedAssignedTo,
        status === 'В_ПРОЦЕС' && !stage.started_at,
        status === 'ГОТОВ',
        notes, req.params.id]

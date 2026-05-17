@@ -271,6 +271,14 @@ function AddStageInline({ orderId, onAdded }) {
   )
 }
 
+const STATUS_BUTTON_LABELS = {
+  'МАТЕРИАЛИ':   { label: 'Изпрати за материали', icon: '📦' },
+  'ПРОИЗВОДСТВО':{ label: 'Пусни в производство', icon: '⚙️' },
+  'ГОТОВА':      { label: 'Маркирай като готова',  icon: '✅' },
+  'ДОСТАВЕНА':   { label: 'Потвърди доставка',     icon: '🚚' },
+  'ОТКАЗАНА':    { label: 'Откажи поръчката',       icon: '✗'  },
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function OrderDetail() {
   const { id } = useParams()
@@ -280,6 +288,7 @@ export default function OrderDetail() {
   const [loading, setLoading] = useState(true)
   const [laborOpen, setLaborOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('stages')
+  const [workers, setWorkers] = useState([])
 
   const fetchOrder = async () => {
     try {
@@ -291,7 +300,12 @@ export default function OrderDetail() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchOrder() }, [id])
+  useEffect(() => {
+    fetchOrder()
+    if (isAdmin || user?.role === 'office') {
+      api.get('/production/workers').then(r => setWorkers(r.data)).catch(() => {})
+    }
+  }, [id])
 
   const advanceStatus = async status => {
     try {
@@ -352,11 +366,17 @@ export default function OrderDetail() {
               + Запиши труд
             </button>
           )}
-          {nextStatuses.map(s => (
-            <button key={s} className={s === 'ОТКАЗАНА' ? 'btn-danger' : 'btn-primary'} onClick={() => advanceStatus(s)}>
-              → {s}
-            </button>
-          ))}
+          {nextStatuses.map(s => {
+            const btn = STATUS_BUTTON_LABELS[s] || { label: s, icon: '→' }
+            return (
+              <button key={s}
+                className={s === 'ОТКАЗАНА' ? 'btn-danger' : 'btn-primary'}
+                onClick={() => advanceStatus(s)}
+                title={`Смени статуса към: ${s}`}>
+                {btn.icon} {btn.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -412,20 +432,41 @@ export default function OrderDetail() {
                 <div key={stage.id} className={`card flex items-center justify-between gap-4
                   ${stage.status === 'В_ПРОЦЕС' ? 'border-orange-500/40' : ''}
                   ${stage.status === 'ГОТОВ' ? 'border-green-500/30' : ''}`}>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0
                       ${stage.status==='ГОТОВ' ? 'bg-green-500/20 text-green-400' :
                         stage.status==='В_ПРОЦЕС' ? 'bg-orange-500/20 text-orange-400' :
                         'bg-border text-muted'}`}>
                       {stage.status === 'ГОТОВ' ? '✓' : i + 1}
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="font-medium text-white">{stage.stage_name}</p>
-                      <p className="text-xs text-muted">
-                        {stage.worker_name && `${stage.worker_name} · `}
-                        {stage.started_at && `Начало: ${format(parseISO(stage.started_at), 'HH:mm d MMM', { locale: bg })}`}
-                        {stage.completed_at && ` · Край: ${format(parseISO(stage.completed_at), 'HH:mm d MMM', { locale: bg })}`}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {(isAdmin || user?.role === 'office') && workers.length > 0 && stage.status !== 'ГОТОВ' ? (
+                          <select
+                            className="text-xs bg-transparent border border-border rounded px-1.5 py-0.5 text-muted hover:border-accent/50 focus:outline-none focus:border-accent cursor-pointer"
+                            value={stage.assigned_to || ''}
+                            onChange={async e => {
+                              await api.patch(`/production/stages/${stage.id}`, { assigned_to: e.target.value || null })
+                              fetchOrder()
+                            }}>
+                            <option value="">— Назначи работник</option>
+                            {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                          </select>
+                        ) : stage.worker_name ? (
+                          <span className="text-xs text-muted">👷 {stage.worker_name}</span>
+                        ) : null}
+                        {stage.started_at && (
+                          <span className="text-xs text-muted">
+                            Начало: {format(parseISO(stage.started_at), 'HH:mm d MMM', { locale: bg })}
+                          </span>
+                        )}
+                        {stage.completed_at && (
+                          <span className="text-xs text-muted">
+                            · Край: {format(parseISO(stage.completed_at), 'HH:mm d MMM', { locale: bg })}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

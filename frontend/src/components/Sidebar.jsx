@@ -94,18 +94,10 @@ export default function Sidebar({ mobile, onClose }) {
   return (
     <div className={`flex flex-col h-full bg-surface border-r border-border ${mobile ? 'w-full' : 'w-60'}`}>
       {/* Logo */}
-      <div className="px-4 py-5 border-b border-border">
+      <div className="px-4 py-4 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-accent/10 rounded-xl border border-accent/30 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25z" />
-            </svg>
-          </div>
-          <div>
-            <p className="font-bold text-white leading-tight">ЕСПЕХО</p>
-            <p className="text-xs text-muted">ERP система</p>
-          </div>
+          <img src="/logo.png" alt="Еспехо" className="h-8 w-auto" />
+          <p className="text-xs text-muted">ERP система</p>
         </div>
       </div>
 
