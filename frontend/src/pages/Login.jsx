@@ -3,12 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 
+const DEMO_ACCOUNTS = [
+  { label: 'Администратор', email: 'admin@espeho.com',      color: 'bg-purple-500/15 text-purple-400 border border-purple-500/30 hover:bg-purple-500/25' },
+  { label: 'Офис',          email: 'office1@espeho.com',    color: 'bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25' },
+  { label: 'Производство',  email: 'prod1@espeho.com',      color: 'bg-orange-500/15 text-orange-400 border border-orange-500/30 hover:bg-orange-500/25' },
+  { label: 'Склад',         email: 'warehouse1@espeho.com', color: 'bg-green-500/15 text-green-400 border border-green-500/30 hover:bg-green-500/25' },
+]
+
 export default function Login() {
-  const [email, setEmail] = useState('')
+  const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading]   = useState(false)
   const { login } = useAuth()
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
 
   const handleSubmit = async e => {
     e.preventDefault()
@@ -23,9 +30,15 @@ export default function Login() {
     }
   }
 
+  const fillDemo = (account) => {
+    setEmail(account.email)
+    setPassword('espeho2024')
+  }
+
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
+
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-accent/10 rounded-2xl border border-accent/30 mb-4">
@@ -75,6 +88,26 @@ export default function Login() {
             ) : 'Влез в системата'}
           </button>
         </form>
+
+        {/* Demo quick-fill */}
+        <div className="mt-5">
+          <p className="text-center text-xs text-muted mb-3 uppercase tracking-wide">Бърз достъп</p>
+          <div className="grid grid-cols-2 gap-2">
+            {DEMO_ACCOUNTS.map(acc => (
+              <button
+                key={acc.email}
+                type="button"
+                onClick={() => fillDemo(acc)}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${acc.color}`}
+              >
+                {acc.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-center text-xs text-muted/60 mt-2">
+            Парола: <span className="font-mono text-muted">espeho2024</span>
+          </p>
+        </div>
 
         <p className="text-center text-xs text-muted mt-6">
           ЕСПЕХО ООД © {new Date().getFullYear()} — soft.espeho.com
