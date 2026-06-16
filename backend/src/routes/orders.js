@@ -131,7 +131,7 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/orders
 router.post('/', roleCheck('admin','office'), async (req, res) => {
-  const { client_id, order_type, deadline, is_urgent, sale_price, notes, delivery_address, source, items } = req.body;
+  const { client_id, order_type, order_category, deadline, is_urgent, sale_price, notes, delivery_address, source, items } = req.body;
   if (!client_id || !order_type) {
     return res.status(400).json({ error: 'Клиентът и типът са задължителни' });
   }
@@ -141,11 +141,11 @@ router.post('/', roleCheck('admin','office'), async (req, res) => {
     await client.query('BEGIN');
 
     const orderRes = await client.query(
-      `INSERT INTO orders (client_id, order_type, deadline, is_urgent, sale_price, notes,
+      `INSERT INTO orders (client_id, order_type, order_category, deadline, is_urgent, sale_price, notes,
                            delivery_address, source, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [client_id, order_type, deadline || null, is_urgent || false,
-       sale_price !== '' ? +sale_price : null, notes || null,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [client_id, order_type, order_category || 'нормална', deadline || null, is_urgent || false,
+       sale_price !== '' && sale_price != null ? +sale_price : null, notes || null,
        delivery_address || null, source || 'office', req.user.id]
     );
     const order = orderRes.rows[0];

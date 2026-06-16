@@ -10,10 +10,25 @@ import toast from 'react-hot-toast'
 import { format, parseISO, isPast } from 'date-fns'
 import { bg } from 'date-fns/locale'
 
-const STATUS_OPTIONS = ['НОВА','МАТЕРИАЛИ','ПРОИЗВОДСТВО','ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА']
-const TYPE_OPTIONS   = ['стъклопакет','единично_стъкло','смесена']
-const SOURCE_OPTIONS = ['phone','email','office','website','referral','other']
-const SOURCE_LABELS  = { phone:'Телефон', email:'Email', office:'Офис', website:'Уебсайт', referral:'Препоръка', other:'Друго' }
+const STATUS_OPTIONS   = ['НОВА','МАТЕРИАЛИ','ПРОИЗВОДСТВО','ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА']
+const TYPE_OPTIONS     = ['стъклопакет','единично_стъкло','смесена']
+const SOURCE_OPTIONS   = ['phone','email','office','website','referral','other']
+const SOURCE_LABELS    = { phone:'Телефон', email:'Email', office:'Офис', website:'Уебсайт', referral:'Препоръка', other:'Друго' }
+const CATEGORY_OPTIONS = ['нормална','гаранция','вътрешна','мострена']
+const CATEGORY_LABELS  = { нормална:'Нормална', гаранция:'Гаранция', вътрешна:'Вътрешна', мострена:'Мострена' }
+
+// M2 helpers — width & height are in mm
+const calcM2 = item => {
+  const w = parseFloat(item.width), h = parseFloat(item.height)
+  return (w > 0 && h > 0) ? (w * h) / 1_000_000 : 0
+}
+const calcLineTotal = item => {
+  const m2 = calcM2(item)
+  const price = parseFloat(item.unit_price) || 0
+  const qty = parseInt(item.qty) || 1
+  return m2 > 0 ? m2 * price * qty : (price * qty)
+}
+const calcOrderTotal = items => items.reduce((s, it) => s + calcLineTotal(it), 0)
 
 // ─── Quick-create client inline form ─────────────────────────────────────────
 function QuickClientForm({ onCreated, onCancel }) {
@@ -125,14 +140,14 @@ function CatalogPicker({ orderType, onSelect, onClose }) {
 function CreateOrderModal({ open, onClose, onCreated }) {
   const [clients, setClients] = useState([])
   const [form, setForm] = useState({
-    client_id:'', order_type:'стъклопакет', deadline:'', is_urgent:false,
-    sale_price:'', notes:'', source:'office',
+    client_id:'', order_type:'стъклопакет', order_category:'нормална',
+    deadline:'', is_urgent:false, sale_price:'', notes:'', source:'office',
     items:[{ product_desc:'', product_type:'стъклопакет', width:'', height:'', qty:1, unit_price:'' }]
   })
   const [loading, setLoading] = useState(false)
   const [showQuickClient, setShowQuickClient] = useState(false)
   const [catalogOpenIdx, setCatalogOpenIdx] = useState(null)
-  const { isAdmin } = useAuth()
+  const { isAdmin, isOffice } = useAuth()
 
   useEffect(() => {
     if (open) api.get('/clients?limit=200').then(r => setClients(r.data.data))
@@ -170,20 +185,28 @@ function CreateOrderModal({ open, onClose, onCreated }) {
     setShowQuickClient(false)
   }
 
+  const emptyForm = {
+    client_id:'', order_type:'стъклопакет', order_category:'нормална',
+    deadline:'', is_urgent:false, sale_price:'', notes:'', source:'office',
+    items:[{ product_desc:'', product_type:'стъклопакет', width:'', height:'', qty:1, unit_price:'' }]
+  }
+
   const handleSubmit = async e => {
     e.preventDefault()
     if (!form.client_id) return toast.error('Изберете клиент')
     setLoading(true)
     try {
-      const res = await api.post('/orders', form)
+      // If sale_price is empty, auto-fill from computed items total
+      const computedTotal = calcOrderTotal(form.items)
+      const payload = {
+        ...form,
+        sale_price: form.sale_price !== '' ? form.sale_price : (computedTotal > 0 ? computedTotal.toFixed(2) : ''),
+      }
+      const res = await api.post('/orders', payload)
       toast.success('Поръчката е създадена')
       onCreated(res.data)
       onClose()
-      setForm({
-        client_id:'', order_type:'стъклопакет', deadline:'', is_urgent:false,
-        sale_price:'', notes:'', source:'office',
-        items:[{ product_desc:'', product_type:'стъклопакет', width:'', height:'', qty:1, unit_price:'' }]
-      })
+      setForm(emptyForm)
     } catch (err) {
       toast.error(err.response?.data?.error || 'Грешка при създаване')
     } finally { setLoading(false) }
@@ -239,13 +262,13 @@ function CreateOrderModal({ open, onClose, onCreated }) {
               {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{SOURCE_LABELS[s] || s}</option>)}
             </select>
           </div>
-          {isAdmin && (
-            <div>
-              <label className="label">Продажна цена (€)</label>
-              <input type="number" className="input" placeholder="0.00" value={form.sale_price}
-                onChange={e => setForm(f => ({ ...f, sale_price: e.target.value }))} />
-            </div>
-          )}
+          <div>
+            <label className="label">Категория</label>
+            <select className="select" value={form.order_category}
+              onChange={e => setForm(f => ({ ...f, order_category: e.target.value }))}>
+              {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+            </select>
+          </div>
           <div className="flex items-center gap-3 pt-5">
             <input type="checkbox" id="urgent" className="w-4 h-4 accent-danger" checked={form.is_urgent}
               onChange={e => setForm(f => ({ ...f, is_urgent: e.target.checked }))} />
@@ -265,13 +288,27 @@ function CreateOrderModal({ open, onClose, onCreated }) {
             <label className="label mb-0">Артикули</label>
             <button type="button" className="btn-ghost text-xs" onClick={addItem}>+ Добави ред</button>
           </div>
+          {/* Column headers */}
+          <div className="grid grid-cols-12 gap-2 mb-1 px-0.5">
+            <span className="col-span-4 text-xs text-muted">Описание</span>
+            <span className="col-span-1 text-xs text-muted text-center">Ш мм</span>
+            <span className="col-span-1 text-xs text-muted text-center">В мм</span>
+            <span className="col-span-1 text-xs text-muted text-center">Бр</span>
+            {isOffice && <span className="col-span-2 text-xs text-muted text-center">EUR/м²</span>}
+            {isOffice && <span className="col-span-1 text-xs text-muted text-center">М²</span>}
+            {isOffice && <span className="col-span-1 text-xs text-muted text-right">Сума</span>}
+            <span className={`${isOffice ? 'col-span-1' : 'col-span-3'}`} />
+          </div>
           <div className="space-y-2">
-            {form.items.map((item, i) => (
-              <div key={i} className="space-y-1">
+            {form.items.map((item, i) => {
+              const m2 = calcM2(item)
+              const lineTotal = calcLineTotal(item)
+              return (
+              <div key={i} className="space-y-0.5">
                 <div className="grid grid-cols-12 gap-2 items-center">
                   {/* Description + catalog trigger */}
                   <div className="col-span-4 relative">
-                    <input className="input w-full" placeholder="Описание (напр. 4-16Ar-4 Low-E)"
+                    <input className="input w-full text-sm" placeholder="Напр. БЯЛО 4ММ/БЯЛО 4ММ"
                       value={item.product_desc}
                       onChange={e => updateItem(i, 'product_desc', e.target.value)} />
                     {catalogOpenIdx === i && (
@@ -282,34 +319,72 @@ function CreateOrderModal({ open, onClose, onCreated }) {
                       />
                     )}
                   </div>
-                  <input className="input col-span-2" placeholder="Ш мм" type="number" value={item.width}
+                  <input className="input col-span-1 text-sm text-center px-1" placeholder="Ш" type="number" value={item.width}
                     onChange={e => updateItem(i, 'width', e.target.value)} />
-                  <input className="input col-span-2" placeholder="В мм" type="number" value={item.height}
+                  <input className="input col-span-1 text-sm text-center px-1" placeholder="В" type="number" value={item.height}
                     onChange={e => updateItem(i, 'height', e.target.value)} />
-                  <input className="input col-span-1" placeholder="Бр" type="number" min="1" value={item.qty}
+                  <input className="input col-span-1 text-sm text-center px-1" placeholder="1" type="number" min="1" value={item.qty}
                     onChange={e => updateItem(i, 'qty', e.target.value)} />
-                  {isAdmin && (
-                    <input className="input col-span-2" placeholder="Ед. цена" type="number" value={item.unit_price}
+                  {isOffice && (
+                    <input className="input col-span-2 text-sm text-center px-1" placeholder="EUR/м²" type="number" step="0.01" value={item.unit_price}
                       onChange={e => updateItem(i, 'unit_price', e.target.value)} />
                   )}
+                  {isOffice && (
+                    <div className="col-span-1 text-center">
+                      <span className={`text-xs font-medium ${m2 > 0 ? 'text-accent' : 'text-muted'}`}>
+                        {m2 > 0 ? m2.toFixed(3) : '—'}
+                      </span>
+                    </div>
+                  )}
+                  {isOffice && (
+                    <div className="col-span-1 text-right">
+                      <span className={`text-xs font-semibold ${lineTotal > 0 ? 'text-white' : 'text-muted'}`}>
+                        {lineTotal > 0 ? lineTotal.toFixed(2) : '—'}
+                      </span>
+                    </div>
+                  )}
                   <button type="button"
-                    className={`${isAdmin ? 'col-span-1' : 'col-span-3'} text-muted hover:text-danger flex justify-center`}
+                    className="col-span-1 text-muted hover:text-danger flex justify-center"
                     onClick={() => removeItem(i)} disabled={form.items.length === 1}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
-                {/* Catalog button per row */}
                 <button type="button"
                   className="text-xs text-accent hover:underline ml-0.5"
                   onClick={() => setCatalogOpenIdx(catalogOpenIdx === i ? null : i)}>
                   {catalogOpenIdx === i ? '↑ Затвори каталога' : '☰ Избери от каталога'}
                 </button>
               </div>
-            ))}
+            )})}
           </div>
+          {/* Items total */}
+          {isOffice && (() => {
+            const total = calcOrderTotal(form.items)
+            return total > 0 ? (
+              <div className="flex justify-between items-center mt-3 pt-3 border-t border-border">
+                <span className="text-sm text-muted">Изчислена сума от артикули</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold text-accent">{total.toFixed(2)} €</span>
+                  <button type="button" className="text-xs text-muted hover:text-white border border-border rounded px-2 py-1"
+                    onClick={() => setForm(f => ({ ...f, sale_price: total.toFixed(2) }))}>
+                    Вкарай като продажна цена
+                  </button>
+                </div>
+              </div>
+            ) : null
+          })()}
         </div>
+
+        {/* Sale price override */}
+        {isOffice && (
+          <div>
+            <label className="label">Продажна цена (€) <span className="text-muted font-normal">— по избор, ако се различава от сумата по-горе</span></label>
+            <input type="number" className="input" placeholder="0.00" step="0.01" value={form.sale_price}
+              onChange={e => setForm(f => ({ ...f, sale_price: e.target.value }))} />
+          </div>
+        )}
 
         <div className="flex gap-3 justify-end pt-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>

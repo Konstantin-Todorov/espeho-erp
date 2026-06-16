@@ -22,10 +22,13 @@ const STATUS_FLOW = {
 }
 
 // ─── Cost Card ────────────────────────────────────────────────────────────────
+const fmt = v => (v && Number(v) > 0) ? `${Number(v).toFixed(2)} €` : '—'
+
 function CostCard({ costs, salePrice, isAdmin }) {
   if (!costs) return null
-  const margin = salePrice ? salePrice - costs.total_cost : null
-  const marginPct = salePrice && costs.total_cost ? ((salePrice - costs.total_cost) / salePrice * 100).toFixed(1) : null
+  const hasCosts = Number(costs.total_cost) > 0
+  const margin = salePrice && hasCosts ? Number(salePrice) - Number(costs.total_cost) : null
+  const marginPct = margin !== null ? (margin / Number(salePrice) * 100).toFixed(1) : null
 
   return (
     <div className="card">
@@ -33,23 +36,23 @@ function CostCard({ costs, salePrice, isAdmin }) {
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
           <span className="text-muted">Материали</span>
-          <span className="text-white font-medium">{Number(costs.material_cost).toFixed(2)} €</span>
+          <span className="text-white font-medium">{fmt(costs.material_cost)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-muted">Труд</span>
-          <span className="text-white font-medium">{Number(costs.labor_cost).toFixed(2)} €</span>
+          <span className="text-white font-medium">{fmt(costs.labor_cost)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-muted">Машини</span>
-          <span className="text-white font-medium">{Number(costs.machine_cost).toFixed(2)} €</span>
+          <span className="text-white font-medium">{fmt(costs.machine_cost)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted">Режийни ({costs.overhead_pct}%)</span>
-          <span className="text-white font-medium">{Number(costs.overhead_cost).toFixed(2)} €</span>
+          <span className="text-muted">Режийни {costs.overhead_pct ? `(${costs.overhead_pct}%)` : ''}</span>
+          <span className="text-white font-medium">{fmt(costs.overhead_cost)}</span>
         </div>
         <div className="border-t border-border pt-2 flex justify-between font-bold">
           <span className="text-gray-200">Себестойност</span>
-          <span className="text-white">{Number(costs.total_cost).toFixed(2)} €</span>
+          <span className={hasCosts ? 'text-white' : 'text-muted'}>{hasCosts ? `${Number(costs.total_cost).toFixed(2)} €` : 'Не е изчислена'}</span>
         </div>
         {isAdmin && salePrice && (
           <>
@@ -57,10 +60,12 @@ function CostCard({ costs, salePrice, isAdmin }) {
               <span className="text-muted">Продажна цена</span>
               <span className="text-white font-medium">{Number(salePrice).toFixed(2)} €</span>
             </div>
-            <div className={`flex justify-between font-bold border-t border-border pt-2 ${margin > 0 ? 'text-green-400' : 'text-danger'}`}>
-              <span>Марж</span>
-              <span>{margin?.toFixed(2)} € ({marginPct}%)</span>
-            </div>
+            {margin !== null && (
+              <div className={`flex justify-between font-bold border-t border-border pt-2 ${margin > 0 ? 'text-green-400' : 'text-danger'}`}>
+                <span>Марж</span>
+                <span>{margin.toFixed(2)} € ({marginPct}%)</span>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -684,9 +689,22 @@ export default function OrderDetail() {
                     <tr key={item.id}>
                       <td>{item.product_desc}</td>
                       <td className="text-muted">{item.width && item.height ? `${item.width}×${item.height} мм` : '—'}</td>
+                      <td className="text-muted text-xs">
+                        {item.width && item.height
+                          ? `${(item.width * item.height / 1_000_000).toFixed(3)} м²`
+                          : '—'}
+                      </td>
                       <td>{item.qty}</td>
-                      {isAdmin && <td>{item.unit_price ? `${item.unit_price} €` : '—'}</td>}
-                      {isAdmin && <td>{item.unit_price ? `${(item.qty * item.unit_price).toFixed(2)} €` : '—'}</td>}
+                      {isAdmin && <td>{item.unit_price ? `${Number(item.unit_price).toFixed(2)} €/м²` : '—'}</td>}
+                      {isAdmin && <td className="font-semibold text-white">
+                        {item.unit_price ? (() => {
+                          const m2 = item.width && item.height ? (item.width * item.height / 1_000_000) : 0
+                          const total = m2 > 0
+                            ? (m2 * item.unit_price * item.qty).toFixed(2)
+                            : (item.unit_price * item.qty).toFixed(2)
+                          return `${total} €`
+                        })() : '—'}
+                      </td>}
                     </tr>
                   ))}
                 </tbody>
