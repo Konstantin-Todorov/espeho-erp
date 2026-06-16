@@ -5,17 +5,17 @@ import { useAuth } from '../context/AuthContext'
 import { OrderStatusBadge, UrgentBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
-import CreatableInput from '../components/ui/CreatableInput'
 import toast from 'react-hot-toast'
 import { format, parseISO, isPast } from 'date-fns'
 import { bg } from 'date-fns/locale'
 
 const STATUS_OPTIONS   = ['НОВА','МАТЕРИАЛИ','ПРОИЗВОДСТВО','ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА']
 const TYPE_OPTIONS     = ['стъклопакет','единично_стъкло','смесена']
+const TYPE_LABELS      = { стъклопакет:'Стъклопакет (двоен/троен)', единично_стъкло:'Единично стъкло', смесена:'Смесена поръчка' }
 const SOURCE_OPTIONS   = ['phone','email','office','website','referral','other']
 const SOURCE_LABELS    = { phone:'Телефон', email:'Email', office:'Офис', website:'Уебсайт', referral:'Препоръка', other:'Друго' }
 const CATEGORY_OPTIONS = ['нормална','гаранция','вътрешна','мострена']
-const CATEGORY_LABELS  = { нормална:'Нормална', гаранция:'Гаранция', вътрешна:'Вътрешна', мострена:'Мострена' }
+const CATEGORY_LABELS  = { нормална:'Нормална', гаранция:'Гаранция (безплатна)', вътрешна:'Вътрешна (за цеха)', мострена:'Мострена (демо)' }
 
 // M2 helpers — width & height are in mm
 const calcM2 = item => {
@@ -242,13 +242,10 @@ function CreateOrderModal({ open, onClose, onCreated }) {
 
           <div>
             <label className="label">Тип поръчка *</label>
-            <CreatableInput
-              value={form.order_type}
-              onChange={val => setForm(f => ({ ...f, order_type: val }))}
-              suggestions={TYPE_OPTIONS}
-              placeholder="стъклопакет, единично стъкло..."
-              required
-            />
+            <select className="select" value={form.order_type}
+              onChange={e => setForm(f => ({ ...f, order_type: e.target.value }))} required>
+              {TYPE_OPTIONS.map(t => <option key={t} value={t}>{TYPE_LABELS[t] || t}</option>)}
+            </select>
           </div>
           <div>
             <label className="label">Краен срок</label>
@@ -284,19 +281,22 @@ function CreateOrderModal({ open, onClose, onCreated }) {
 
         {/* Items */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="label mb-0">Артикули</label>
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <label className="label mb-0">Артикули</label>
+              {isOffice && <p className="text-xs text-muted mt-0.5">Въведи размерите в мм → М² и сумата се изчисляват автоматично</p>}
+            </div>
             <button type="button" className="btn-ghost text-xs" onClick={addItem}>+ Добави ред</button>
           </div>
           {/* Column headers */}
           <div className="grid grid-cols-12 gap-2 mb-1 px-0.5">
-            <span className="col-span-4 text-xs text-muted">Описание</span>
-            <span className="col-span-1 text-xs text-muted text-center">Ш мм</span>
-            <span className="col-span-1 text-xs text-muted text-center">В мм</span>
-            <span className="col-span-1 text-xs text-muted text-center">Бр</span>
-            {isOffice && <span className="col-span-2 text-xs text-muted text-center">EUR/м²</span>}
-            {isOffice && <span className="col-span-1 text-xs text-muted text-center">М²</span>}
-            {isOffice && <span className="col-span-1 text-xs text-muted text-right">Сума</span>}
+            <span className="col-span-4 text-xs text-muted">Описание на стъклото</span>
+            <span className="col-span-1 text-xs text-muted text-center" title="Ширина в милиметри">Ш (мм)</span>
+            <span className="col-span-1 text-xs text-muted text-center" title="Височина в милиметри">В (мм)</span>
+            <span className="col-span-1 text-xs text-muted text-center" title="Брой бройки">Бр.</span>
+            {isOffice && <span className="col-span-2 text-xs text-muted text-center" title="Цена за квадратен метър">€/м²</span>}
+            {isOffice && <span className="col-span-1 text-xs text-muted text-center" title="Квадратура = Ш×В÷1 000 000">М²</span>}
+            {isOffice && <span className="col-span-1 text-xs text-muted text-right" title="М² × €/м² × Брой">Сума €</span>}
             <span className={`${isOffice ? 'col-span-1' : 'col-span-3'}`} />
           </div>
           <div className="space-y-2">
@@ -367,9 +367,9 @@ function CreateOrderModal({ open, onClose, onCreated }) {
                 <span className="text-sm text-muted">Изчислена сума от артикули</span>
                 <div className="flex items-center gap-3">
                   <span className="text-lg font-bold text-accent">{total.toFixed(2)} €</span>
-                  <button type="button" className="text-xs text-muted hover:text-white border border-border rounded px-2 py-1"
+                  <button type="button" className="text-xs text-accent hover:text-white border border-accent/40 hover:border-accent rounded px-2 py-1 transition-colors"
                     onClick={() => setForm(f => ({ ...f, sale_price: total.toFixed(2) }))}>
-                    Вкарай като продажна цена
+                    ↓ Използвай като продажна цена
                   </button>
                 </div>
               </div>
@@ -487,7 +487,7 @@ export default function Orders() {
                       <div className="font-medium text-white">{o.client_name}</div>
                       {o.client_phone && <div className="text-xs text-muted">{o.client_phone}</div>}
                     </td>
-                    <td><span className="text-xs text-muted">{o.order_type}</span></td>
+                    <td><span className="text-xs text-muted">{TYPE_LABELS[o.order_type] || o.order_type}</span></td>
                     <td><OrderStatusBadge status={o.status} /></td>
                     <td className="min-w-[100px]">
                       {pct !== null ? (
