@@ -30,9 +30,16 @@ export default function Login() {
     }
   }
 
-  const fillDemo = (account) => {
-    setEmail(account.email)
-    setPassword('espeho2024')
+  const loginAsDemo = async (account) => {
+    setLoading(true)
+    try {
+      await login(account.email, 'espeho2024')
+      navigate('/')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Грешка при влизане')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -97,16 +104,14 @@ export default function Login() {
               <button
                 key={acc.email}
                 type="button"
-                onClick={() => fillDemo(acc)}
-                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${acc.color}`}
+                onClick={() => loginAsDemo(acc)}
+                disabled={loading}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${acc.color} disabled:opacity-50`}
               >
                 {acc.label}
               </button>
             ))}
           </div>
-          <p className="text-center text-xs text-muted/60 mt-2">
-            Парола: <span className="font-mono text-muted">espeho2024</span>
-          </p>
         </div>
 
         <p className="text-center text-xs text-muted mt-6">
