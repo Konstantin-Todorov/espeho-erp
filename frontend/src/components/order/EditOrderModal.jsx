@@ -3,9 +3,10 @@ import api from '../../api/axios'
 import toast from 'react-hot-toast'
 import Modal from '../ui/Modal'
 import ClientPicker from '../ui/ClientPicker'
+import OptionSelect from '../ui/OptionSelect'
 import {
   TYPE_LABELS, TYPE_OPTIONS, CATEGORY_LABELS, CATEGORY_OPTIONS, FULFILLMENT_LABELS, FULFILLMENT_OPTIONS,
-  SOURCE_LABELS, SOURCE_OPTIONS, INSTALL_LABELS,
+  INSTALL_LABELS,
 } from '../../utils/labels'
 
 // Edit an existing order's header (everything except its lines, payments and status).
@@ -98,9 +99,7 @@ export default function EditOrderModal({ open, onClose, order, onSaved }) {
           </label>
           <label>
             <span className="label">Откъде дойде</span>
-            <select className="select" value={f.source} onChange={e => set({ source: e.target.value })}>
-              {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{SOURCE_LABELS[s]}</option>)}
-            </select>
+            <OptionSelect listKey="source" value={f.source} onChange={v => set({ source: v })} />
           </label>
           <label>
             <span className="label">Крайна цена с ДДС (€)</span>

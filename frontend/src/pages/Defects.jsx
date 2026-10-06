@@ -7,8 +7,10 @@ import Modal from '../components/ui/Modal'
 import OrderPicker from '../components/ui/OrderPicker'
 import toast from 'react-hot-toast'
 import { orderNo, dateBg, eur } from '../utils/labels'
+import OptionSelect from '../components/ui/OptionSelect'
+import useOptions from '../hooks/useOptions'
 
-const CAUSE_OPTIONS = ['машинна_грешка','човешка_грешка','дефект_материал','грешка_размер','транспортна_повреда','друго']
+// Fallback labels for old records; the live list is in Настройки → Списъци
 const CAUSE_LABELS  = { машинна_грешка:'Машинна грешка', човешка_грешка:'Човешка грешка', дефект_материал:'Дефект материал', грешка_размер:'Грешка в размера', транспортна_повреда:'Транспортна повреда', друго:'Друго' }
 const DECISION_LABELS = { преработка: 'Преработка', отписване: 'Отписване' }
 const PAGE_SIZE = 50
@@ -101,9 +103,7 @@ function CreateDefectModal({ open, onClose, onCreated, prefillOrderId }) {
           </div>
           <div>
             <label className="label">Причина *</label>
-            <select className="select" value={form.cause_type} onChange={e => set('cause_type', e.target.value)} required>
-              {CAUSE_OPTIONS.map(c => <option key={c} value={c}>{CAUSE_LABELS[c]}</option>)}
-            </select>
+            <OptionSelect listKey="defect_cause" value={form.cause_type} onChange={v => set('cause_type', v)} required />
           </div>
           <div>
             <label className="label">Машина</label>
@@ -199,6 +199,7 @@ export default function Defects() {
   const [createOpen, setCreateOpen] = useState(false)
   const [resolving, setResolving] = useState(null)
   const [filters, setFilters] = useState({ cause_type: '', from: '', to: '' })
+  const { label: optLabel } = useOptions()
   const { isOffice, isProduction, canSeePrices } = useAuth()
   const canReport = isOffice || isProduction
   const [searchParams, setSearchParams] = useSearchParams()
@@ -258,10 +259,8 @@ export default function Defects() {
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
-        <select className="select w-48" value={filters.cause_type} onChange={e => setFilter('cause_type', e.target.value)}>
-          <option value="">Всички причини</option>
-          {CAUSE_OPTIONS.map(c => <option key={c} value={c}>{CAUSE_LABELS[c]}</option>)}
-        </select>
+        <OptionSelect listKey="defect_cause" className="select w-56" allowAdd={false} placeholder="Всички причини"
+          value={filters.cause_type} onChange={v => setFilter('cause_type', v)} />
         <input type="date" className="input w-40" value={filters.from} onChange={e => setFilter('from', e.target.value)} />
         <span className="text-muted self-center">—</span>
         <input type="date" className="input w-40" value={filters.to} onChange={e => setFilter('to', e.target.value)} />
@@ -288,7 +287,7 @@ export default function Defects() {
                     </Link>
                   </td>
                   <td>
-                    <div className="font-medium text-white">{CAUSE_LABELS[d.cause_type] || d.cause_type}</div>
+                    <div className="font-medium text-white">{optLabel('defect_cause', d.cause_type, CAUSE_LABELS)}</div>
                     {d.cause_notes && <div className="text-xs text-muted">{d.cause_notes.slice(0, 60)}{d.cause_notes.length > 60 ? '...' : ''}</div>}
                   </td>
                   <td>

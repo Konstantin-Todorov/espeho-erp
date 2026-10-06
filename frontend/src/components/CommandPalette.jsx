@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 import { orderNo, eur } from '../utils/labels'
+import { Search } from 'lucide-react'
 
 // Ctrl/⌘+K from anywhere: find an order by number / client / phone, open a client,
 // or start any action ("нова поръчка", "неплатени"…) without hunting through menus.
@@ -95,9 +96,7 @@ export default function CommandPalette({ open, onClose }) {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-xl bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center gap-3 px-4 border-b border-border">
-          <svg className="w-5 h-5 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
-          </svg>
+          <Search className="w-5 h-5 text-muted flex-shrink-0" strokeWidth={2} />
           <input ref={inputRef} autoFocus value={q} onChange={e => setQ(e.target.value)}
             className="flex-1 bg-transparent py-4 text-white placeholder:text-muted outline-none text-base"
             placeholder={isOffice ? 'Номер на поръчка, клиент, телефон или действие…' : 'Номер на поръчка или клиент…'} />

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import api from '../../api/axios'
 import toast from 'react-hot-toast'
 import Modal from '../ui/Modal'
-import { PAYMENT_METHODS, FULFILLMENT_LABELS, orderNo, eur } from '../../utils/labels'
+import { FULFILLMENT_LABELS, orderNo, eur } from '../../utils/labels'
+import useOptions from '../../hooks/useOptions'
 
 // Hand an order over to the client and record the payment in the same step —
 // that is how it happens at the counter, so it should be one click, not two screens.
@@ -12,6 +13,7 @@ export default function HandoverDialog({ order, open, onClose, onDone, paymentOn
   const paid = +order?.paid_amount || 0
   const due = Math.max(0, price - paid)
   const charges = order?.order_category === 'нормална' && due > 0.009
+  const { lists } = useOptions()
   const [mode, setMode] = useState('full') // full | part | later
   const [method, setMethod] = useState('брой')
   const [amount, setAmount] = useState('')
@@ -70,10 +72,10 @@ export default function HandoverDialog({ order, open, onClose, onDone, paymentOn
                   <input className="input text-right" inputMode="decimal" placeholder="Сума €" autoFocus
                     value={amount} onChange={e => setAmount(e.target.value)} />
                 )}
-                <div className={`grid grid-cols-4 gap-1 p-1 rounded-xl bg-bg border border-border ${mode === 'part' ? '' : 'col-span-2'}`}>
-                  {PAYMENT_METHODS.map(m => (
-                    <button key={m} type="button" onClick={() => setMethod(m)}
-                      className={`text-xs py-1.5 rounded-lg ${method === m ? 'bg-accent text-white' : 'text-muted hover:text-white'}`}>{m}</button>
+                <div className={`flex flex-wrap gap-1 p-1 rounded-xl bg-bg border border-border ${mode === 'part' ? '' : 'col-span-2'}`}>
+                  {(lists.payment_method || []).map(m => (
+                    <button key={m.id} type="button" onClick={() => setMethod(m.value)}
+                      className={`flex-1 text-xs px-2 py-1.5 rounded-lg whitespace-nowrap ${method === m.value ? 'bg-accent text-white' : 'text-muted hover:text-white'}`}>{m.label}</button>
                   ))}
                 </div>
               </div>

@@ -9,6 +9,7 @@ import { orderNo } from '../utils/labels'
 import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
+import { PackagePlus, PackageMinus, Package, AlertTriangle, MapPin, Pencil, CheckCircle2, ArrowUpDown } from 'lucide-react'
 
 const CATEGORIES = ['стъкло','дистанционна_рамка','уплътнител','консуматив','химия','инструмент','друго']
 const CAT_LABELS  = {
@@ -52,7 +53,7 @@ function ReceiveModal({ open, onClose, onDone, materials, locations, preselect }
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   return (
-    <Modal open={open} onClose={onClose} title="📥 Добави наличност (приход)" size="md">
+    <Modal open={open} onClose={onClose} title={<span className="inline-flex items-center gap-2"><PackagePlus className="w-5 h-5" strokeWidth={2} />Добави наличност (приход)</span>} size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="label">Материал *</label>
@@ -88,7 +89,7 @@ function ReceiveModal({ open, onClose, onDone, materials, locations, preselect }
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Записва...' : '📥 Добави наличност'}
+            {loading ? 'Записва...' : <><PackagePlus className="w-4 h-4" strokeWidth={2} />Добави наличност</>}
           </button>
         </div>
       </form>
@@ -123,7 +124,7 @@ function IssueModal({ open, onClose, onDone, materials, locations, preselect }) 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   return (
-    <Modal open={open} onClose={onClose} title="📤 Изпиши материал към поръчка" size="md">
+    <Modal open={open} onClose={onClose} title={<span className="inline-flex items-center gap-2"><PackageMinus className="w-5 h-5" strokeWidth={2} />Изпиши материал към поръчка</span>} size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="label">Материал *</label>
@@ -156,7 +157,7 @@ function IssueModal({ open, onClose, onDone, materials, locations, preselect }) 
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-danger" disabled={loading}>
-            {loading ? 'Изписва...' : '📤 Изпиши материала'}
+            {loading ? 'Изписва...' : <><PackageMinus className="w-4 h-4" strokeWidth={2} />Изпиши материала</>}
           </button>
         </div>
       </form>
@@ -351,7 +352,7 @@ function MaterialDetailModal({ open, onClose, material, locations, onEdit, onRec
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Наличности по локации</h3>
             <span className={`text-sm font-bold ${isLow ? 'text-yellow-400' : 'text-white'}`}>
-              Общо: {totalQty.toFixed(2)} {material.unit} {isLow && '⚠'}
+              Общо: {totalQty.toFixed(2)} {material.unit} {isLow && <AlertTriangle className="w-3.5 h-3.5 inline-block align-[-2px]" strokeWidth={2} />}
             </span>
           </div>
           {(!material.stock_by_location || material.stock_by_location.filter(s => s.quantity > 0).length === 0) ? (
@@ -365,7 +366,7 @@ function MaterialDetailModal({ open, onClose, material, locations, onEdit, onRec
                     ${s.below_threshold ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-border bg-surface/40'}`}>
                     <span className="text-gray-300">{s.location_name}</span>
                     <div className="flex items-center gap-3">
-                      {s.below_threshold && <span className="text-xs text-yellow-400">⚠ Под минимум</span>}
+                      {s.below_threshold && <span className="text-xs text-yellow-400 inline-flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" strokeWidth={2} />Под минимум</span>}
                       <span className={`font-semibold ${s.below_threshold ? 'text-yellow-400' : 'text-white'}`}>
                         {Number(s.quantity).toFixed(2)} {material.unit}
                       </span>
@@ -410,17 +411,17 @@ function MaterialDetailModal({ open, onClose, material, locations, onEdit, onRec
         <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
           {canManage && (
             <button className="btn-primary" onClick={() => { onClose(); onReceive({ material_id: material.id }) }}>
-              📥 Добави наличност
+              <PackagePlus className="w-4 h-4" strokeWidth={2} />Добави наличност
             </button>
           )}
           {canIssue && (
             <button className="btn-secondary" onClick={() => { onClose(); onIssue({ material_id: material.id }) }}>
-              📤 Изпиши към поръчка
+              <PackageMinus className="w-4 h-4" strokeWidth={2} />Изпиши към поръчка
             </button>
           )}
           {canManage && (
             <button className="btn-secondary ml-auto" onClick={() => { onClose(); onEdit(material) }}>
-              ✏ Редактирай
+              <Pencil className="w-4 h-4" strokeWidth={2} />Редактирай
             </button>
           )}
         </div>
@@ -508,10 +509,10 @@ export default function Warehouse() {
   if (loading) return <PageLoader />
 
   const tabs = [
-    { id: 'stock',     label: '📦 Наличности',  count: materials.length },
-    { id: 'low-stock', label: '⚠ Под минимум',   count: lowStock.length },
-    { id: 'movements', label: '↕ Движения',      count: null },
-    { id: 'locations', label: '📍 Локации',       count: locations.length },
+    { id: 'stock',     icon: Package,       label: 'Наличности',  count: materials.length },
+    { id: 'low-stock', icon: AlertTriangle, label: 'Под минимум',   count: lowStock.length },
+    { id: 'movements', icon: ArrowUpDown,   label: 'Движения',      count: null },
+    { id: 'locations', icon: MapPin,        label: 'Локации',       count: locations.length },
   ]
 
   return (
@@ -529,12 +530,12 @@ export default function Warehouse() {
           <div className="flex gap-2 flex-wrap">
             {canManage && (
               <button className="btn-primary" onClick={() => setReceivePreselect({})}>
-                📥 Приход
+                <PackagePlus className="w-4 h-4" strokeWidth={2} />Приход
               </button>
             )}
             {canIssue && (
               <button className="btn-secondary" onClick={() => setIssuePreselect({})}>
-                📤 Изписване
+                <PackageMinus className="w-4 h-4" strokeWidth={2} />Изписване
               </button>
             )}
           </div>
@@ -545,8 +546,9 @@ export default function Warehouse() {
       <div className="flex border-b border-border gap-1 mb-5">
         {tabs.map(t => (
           <button key={t.id} onClick={() => selectTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap inline-flex items-center gap-1.5
               ${activeTab === t.id ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-white'}`}>
+            <t.icon className="w-4 h-4" strokeWidth={2} />
             {t.label}
             {t.count !== null && <span className={`ml-1.5 text-xs ${t.id === 'low-stock' && t.count ? 'text-yellow-400' : 'text-muted'}`}>({t.count})</span>}
           </button>
@@ -557,7 +559,7 @@ export default function Warehouse() {
       {activeTab === 'low-stock' && (
         lowStock.length === 0 ? (
           <div className="card text-center py-12">
-            <p className="text-2xl mb-3">✓</p>
+            <CheckCircle2 className="w-8 h-8 mx-auto mb-3 text-green-400" strokeWidth={1.75} />
             <p className="text-white font-semibold mb-1">Всички материали са над минимума</p>
             <p className="text-muted text-sm">Минималната наличност се задава от „Редактирай“ на материала.</p>
           </div>
@@ -576,8 +578,8 @@ export default function Warehouse() {
                     <td className="text-right text-muted">{Number(s.min_threshold).toFixed(2)} {s.unit}</td>
                     <td className="text-right" onClick={e => e.stopPropagation()}>
                       {canManage && (
-                        <button className="text-xs text-accent hover:underline" onClick={() => setReceivePreselect({ material_id: s.id })}>
-                          📥 Добави
+                        <button className="text-xs text-accent hover:underline inline-flex items-center gap-1" onClick={() => setReceivePreselect({ material_id: s.id })}>
+                          <PackagePlus className="w-3.5 h-3.5" strokeWidth={2} />Добави
                         </button>
                       )}
                     </td>
@@ -644,7 +646,7 @@ export default function Warehouse() {
                           {m.stock_by_location?.filter(s => s.quantity > 0).map((s, i) => (
                             <div key={i} className="text-xs text-muted">
                               <span className="text-gray-400">{s.location_name}:</span> {Number(s.quantity).toFixed(2)} {m.unit}
-                              {s.below_threshold && <span className="text-yellow-400 ml-1">⚠</span>}
+                              {s.below_threshold && <AlertTriangle className="w-3 h-3 text-yellow-400 ml-1 inline-block align-[-2px]" strokeWidth={2} aria-label="Под минимум" />}
                             </div>
                           ))}
                           {!m.stock_by_location?.some(s => s.quantity > 0) && <span className="text-xs text-muted">Няма наличност</span>}
@@ -657,12 +659,12 @@ export default function Warehouse() {
                       <td onClick={e => e.stopPropagation()}>
                         <div className="flex gap-1 justify-end">
                           {canManage && (
-                            <button className="text-xs text-accent hover:underline px-2 py-1" title="Приход"
-                              onClick={() => setReceivePreselect({ material_id: m.id })}>📥</button>
+                            <button className="text-xs text-accent hover:underline px-2 py-1" title="Приход" aria-label="Приход"
+                              onClick={() => setReceivePreselect({ material_id: m.id })}><PackagePlus className="w-4 h-4" strokeWidth={2} /></button>
                           )}
                           {canIssue && (
-                            <button className="text-xs text-muted hover:text-white px-2 py-1" title="Изпиши към поръчка"
-                              onClick={() => setIssuePreselect({ material_id: m.id })}>📤</button>
+                            <button className="text-xs text-muted hover:text-white px-2 py-1" title="Изпиши към поръчка" aria-label="Изпиши към поръчка"
+                              onClick={() => setIssuePreselect({ material_id: m.id })}><PackageMinus className="w-4 h-4" strokeWidth={2} /></button>
                           )}
                         </div>
                       </td>
@@ -691,7 +693,9 @@ export default function Warehouse() {
                   <td className="font-medium text-white">{m.material_name}</td>
                   <td>
                     <span className={`badge ${m.movement_type==='ПОЛУЧЕНО' ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'}`}>
-                      {m.movement_type === 'ПОЛУЧЕНО' ? '📥 Приход' : '📤 Изписване'}
+                      {m.movement_type === 'ПОЛУЧЕНО'
+                        ? <><PackagePlus className="w-3 h-3 mr-1" strokeWidth={2} />Приход</>
+                        : <><PackageMinus className="w-3 h-3 mr-1" strokeWidth={2} />Изписване</>}
                     </span>
                   </td>
                   <td className={`font-semibold ${m.movement_type==='ПОЛУЧЕНО' ? 'text-green-400' : 'text-red-400'}`}>
@@ -721,7 +725,7 @@ export default function Warehouse() {
           </div>
           {locations.length === 0 ? (
             <div className="card text-center py-12">
-              <p className="text-2xl mb-3">📍</p>
+              <MapPin className="w-8 h-8 mx-auto mb-3 text-muted" strokeWidth={1.75} />
               <p className="text-white font-semibold mb-1">Няма добавени локации</p>
               <p className="text-muted text-sm mb-4">Добавете зони и рафтове за организиране на склада</p>
               {canManage && (
@@ -736,12 +740,12 @@ export default function Warehouse() {
                   <div key={loc.id} className="card hover:border-accent/40 transition-colors">
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <p className="font-semibold text-white">📍 {loc.name}</p>
+                        <p className="font-semibold text-white flex items-center gap-1.5"><MapPin className="w-4 h-4 flex-shrink-0 text-muted" strokeWidth={2} />{loc.name}</p>
                         {loc.description && <p className="text-xs text-muted mt-0.5">{loc.description}</p>}
                       </div>
                       {canManage && (
-                        <button className="text-xs text-muted hover:text-accent"
-                          onClick={() => setLocFormTarget(loc)}>✏ Редактирай</button>
+                        <button className="text-xs text-muted hover:text-accent inline-flex items-center gap-1"
+                          onClick={() => setLocFormTarget(loc)}><Pencil className="w-3.5 h-3.5" strokeWidth={2} />Редактирай</button>
                       )}
                     </div>
                     {matsHere.length === 0 ? (

@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 const { getSettings, priceLine, sumLines, n } = require('../utils/pricing');
+const { stageTemplate } = require('./options');
 
 const STAGES = {
   'стъклопакет':     ['Рязане', 'Миене', 'Сглобяване', 'Заливане'],
@@ -187,7 +188,8 @@ router.post('/:id/convert', async (req, res) => {
     }
 
     // Production stages matching the order type
-    const stages = STAGES[order_type];
+    const configured = await stageTemplate(order_type, dbClient);
+    const stages = configured.length ? configured : STAGES[order_type];
     for (let i = 0; i < stages.length; i++) {
       await dbClient.query(
         'INSERT INTO production_stages (order_id, stage_name, stage_order) VALUES ($1,$2,$3)',

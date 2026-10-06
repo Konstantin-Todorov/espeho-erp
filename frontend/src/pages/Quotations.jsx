@@ -7,6 +7,7 @@ import useSettings from '../hooks/useSettings'
 import { priceLine, sumLines } from '../utils/pricing'
 import { TYPE_LABELS, UOM_LABELS, UOM_HINTS, eur, num, dateBg, todayStr } from '../utils/labels'
 import toast from 'react-hot-toast'
+import { Check, FileText, Pencil, Printer, X } from 'lucide-react'
 
 const STATUS_LABELS = {
   DRAFT:    { label: 'Чернова',   color: 'bg-gray-500/20 text-gray-400' },
@@ -151,7 +152,7 @@ function QuoteFormModal({ open, onClose, onSaved, editData }) {
                         aria-label="Цена" value={item.unit_price ?? ''} onChange={e => setItem(i, { unit_price: e.target.value })} />
                     </div>
                     <button type="button" className="text-muted hover:text-danger p-2 flex-shrink-0" title="Премахни реда" onClick={() => removeItem(i)}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 mt-1.5 pl-7 pr-9">
@@ -184,7 +185,7 @@ function QuoteFormModal({ open, onClose, onSaved, editData }) {
           <div className="flex gap-3 justify-end">
             <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
             <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Записва...' : isEdit ? '✓ Запази промените' : '+ Създай оферта'}
+              {loading ? 'Записва...' : isEdit ? <><Check className="w-4 h-4" strokeWidth={2} />Запази промените</> : '+ Създай оферта'}
             </button>
           </div>
         </div>
@@ -256,7 +257,7 @@ function ConvertModal({ open, onClose, quote, onConverted }) {
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Създава...' : '✓ Създай поръчка'}
+            {loading ? 'Създава...' : <><Check className="w-4 h-4" strokeWidth={2} />Създай поръчка</>}
           </button>
         </div>
       </form>
@@ -432,7 +433,7 @@ export default function Quotations() {
         <div className="text-center py-16 text-muted">Зарежда се…</div>
       ) : quotes.length === 0 ? (
         <div className="card text-center py-16">
-          <div className="text-4xl mb-3">📄</div>
+          <FileText className="w-10 h-10 mx-auto mb-3 text-muted" strokeWidth={1.5} />
           <p className="text-white font-semibold mb-1">Няма оферти</p>
           <p className="text-muted text-sm mb-4">Създайте първата оферта за клиент</p>
           <button className="btn-primary" onClick={openNew}>+ Нова оферта</button>
@@ -470,9 +471,9 @@ export default function Quotations() {
                   <td>
                     <div className="flex gap-1.5 flex-wrap">
                       {!q.converted_to && (
-                        <button className="btn-ghost text-xs py-1 px-2" onClick={() => openEdit(q)} title="Редактирай">✏️</button>
+                        <button className="btn-ghost text-xs py-1 px-2" onClick={() => openEdit(q)} title="Редактирай" aria-label="Редактирай"><Pencil className="w-3.5 h-3.5" strokeWidth={2} /></button>
                       )}
-                      <button className="btn-ghost text-xs py-1 px-2" onClick={() => printQuote(q)} title="Принтирай">🖨️</button>
+                      <button className="btn-ghost text-xs py-1 px-2" onClick={() => printQuote(q)} title="Принтирай" aria-label="Принтирай"><Printer className="w-3.5 h-3.5" strokeWidth={2} /></button>
                       {q.status === 'DRAFT' && (
                         <button className="btn-ghost text-xs py-1 px-2 text-blue-400"
                           onClick={() => updateStatus(q.id, 'SENT')}>Изпратена</button>
@@ -486,8 +487,8 @@ export default function Quotations() {
                           onClick={() => updateStatus(q.id, 'REJECTED')}>Отказана</button>
                       )}
                       {q.converted_to && (
-                        <Link to={`/orders/${q.converted_to}`} className="text-xs text-green-400 px-2 hover:underline">
-                          ✓ Към поръчката
+                        <Link to={`/orders/${q.converted_to}`} className="text-xs text-green-400 px-2 hover:underline inline-flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" strokeWidth={2} />Към поръчката
                         </Link>
                       )}
                     </div>

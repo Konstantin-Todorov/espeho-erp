@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal'
 import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
+import { Check, Pencil, AlertTriangle, Cog } from 'lucide-react'
 
 const MAINT_TYPES = ['профилактика','ремонт','смяна_части','калибриране','почистване']
 const MAINT_LABELS = {
@@ -177,7 +178,7 @@ function MaintenanceModal({ open, onClose, machine, onDone }) {
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Записва...' : '✓ Запиши поддръжка'}
+            {loading ? 'Записва...' : <><Check className="w-4 h-4" strokeWidth={2} />Запиши поддръжка</>}
           </button>
         </div>
       </form>
@@ -227,7 +228,7 @@ function MachineDetailModal({ open, onClose, machineId, onEdit, onDelete, onLogM
               <div key={item.label} className="card py-3 px-4">
                 <p className="text-xs text-muted uppercase tracking-wide mb-1">{item.label}</p>
                 <p className={`font-semibold ${item.alert ? 'text-danger' : 'text-white'}`}>
-                  {item.alert ? '⚠ ' : ''}{item.val}
+                  {item.alert && <AlertTriangle className="w-4 h-4 inline-block align-[-2px] mr-1" strokeWidth={2} />}{item.val}
                 </p>
               </div>
             ))}
@@ -282,7 +283,7 @@ function MachineDetailModal({ open, onClose, machineId, onEdit, onDelete, onLogM
             {isAdmin && (
               <>
                 <button className="btn-secondary" onClick={() => { onClose(); onEdit(machine) }}>
-                  ✏ Редактирай
+                  <Pencil className="w-4 h-4" strokeWidth={2} />Редактирай
                 </button>
                 <button className="btn-danger ml-auto" onClick={() => onDelete(machine)}>
                   Деактивирай
@@ -319,7 +320,9 @@ function MachineCard({ machine, onClick }) {
           <p className="text-xs text-muted mt-0.5">{machine.type || '—'}{machine.model && ` · ${machine.model}`}</p>
         </div>
         <span className={`badge flex-shrink-0 ml-2 ${machine.service_overdue ? 'bg-red-500/20 text-danger border-red-500/30' : 'bg-green-500/20 text-green-400 border-green-500/30'}`}>
-          {machine.service_overdue ? '⚠ Просрочена' : '✓ OK'}
+          {machine.service_overdue
+            ? <><AlertTriangle className="w-3 h-3 mr-1" strokeWidth={2} />Просрочена</>
+            : <><Check className="w-3 h-3 mr-1" strokeWidth={2} />OK</>}
         </span>
       </div>
 
@@ -420,7 +423,7 @@ export default function Machines() {
       {/* Overdue alert */}
       {overdue.length > 0 && (
         <div className="card border-red-500/30 bg-red-500/5 mb-6">
-          <p className="text-danger font-semibold mb-2">⚠ Просрочена поддръжка</p>
+          <p className="text-danger font-semibold mb-2 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" strokeWidth={2} />Просрочена поддръжка</p>
           <div className="space-y-1">
             {overdue.map(m => (
               <div key={m.id} className="flex items-center justify-between text-sm">
@@ -437,7 +440,7 @@ export default function Machines() {
       {/* Grid */}
       {machines.length === 0 ? (
         <div className="card text-center py-16">
-          <p className="text-4xl mb-4">⚙️</p>
+          <Cog className="w-10 h-10 mx-auto mb-4 text-muted" strokeWidth={1.5} />
           <p className="text-white font-semibold mb-1">Няма добавени машини</p>
           <p className="text-muted text-sm mb-4">Добавете машините от вашия цех за проследяване на поддръжката</p>
           {isAdmin && <button className="btn-primary mx-auto" onClick={() => setAddOpen(true)}>+ Добави първа машина</button>}

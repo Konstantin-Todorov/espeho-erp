@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { PageLoader } from '../components/ui/Spinner'
 import { invalidateSettingsCache } from '../hooks/useSettings'
 import { dateBg } from '../utils/labels'
+import OptionListsEditor from '../components/settings/OptionListsEditor'
 
 // Grouped so the owner sees what each number affects
 const GROUPS = [
@@ -53,7 +54,7 @@ export default function Settings() {
       <div className="flex items-center justify-between mb-6 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Настройки</h1>
-          <p className="text-sm text-muted mt-0.5">Проценти и правила, по които системата смята цени и отчети</p>
+          <p className="text-sm text-muted mt-0.5">Проценти, правила и списъци, по които работи системата</p>
         </div>
         <button className="btn-primary" disabled={!changed.length || saving} onClick={save}>
           {saving ? 'Запис…' : changed.length ? `Запази (${changed.length})` : 'Запазено'}
@@ -87,6 +88,7 @@ export default function Settings() {
             </div>
           </div>
         ))}
+        <OptionListsEditor />
       </div>
     </div>
   )

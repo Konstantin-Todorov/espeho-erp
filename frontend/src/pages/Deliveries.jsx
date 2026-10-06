@@ -5,6 +5,7 @@ import Modal from '../components/ui/Modal'
 import OrderPicker from '../components/ui/OrderPicker'
 import toast from 'react-hot-toast'
 import { orderNo, dateBg, todayStr } from '../utils/labels'
+import { Check, X, Truck, Pencil } from 'lucide-react'
 
 const STATUS_CONFIG = {
   PENDING:    { label: 'Изчаква',      color: 'bg-blue-500/20 text-blue-400' },
@@ -104,7 +105,7 @@ function DeliveryModal({ open, onClose, delivery, onSaved }) {
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Записва...' : '✓ Запази'}
+            {loading ? 'Записва...' : <><Check className="w-4 h-4" strokeWidth={2} />Запази</>}
           </button>
         </div>
       </form>
@@ -268,7 +269,7 @@ export default function Deliveries() {
         <input type="date" className="input w-40" value={filter.to}
           onChange={e => setFilter(f => ({...f,to:e.target.value}))} />
         {(filter.status || filter.from || filter.to) && (
-          <button className="btn-ghost text-xs" onClick={() => setFilter({ status:'',from:'',to:'' })}>✕ Изчисти</button>
+          <button className="btn-ghost text-xs" onClick={() => setFilter({ status:'',from:'',to:'' })}><X className="w-3.5 h-3.5" strokeWidth={2} />Изчисти</button>
         )}
       </div>
 
@@ -277,7 +278,7 @@ export default function Deliveries() {
         <div className="text-center py-16 text-muted">Зарежда се…</div>
       ) : deliveries.length === 0 ? (
         <div className="card text-center py-16">
-          <div className="text-4xl mb-3">🚚</div>
+          <Truck className="w-10 h-10 mx-auto mb-3 text-muted" strokeWidth={1.5} />
           <p className="text-white font-semibold mb-1">Няма доставки</p>
           <p className="text-muted text-sm mb-4">Планирайте първата доставка</p>
           <button className="btn-primary" onClick={() => setNewOpen(true)}>+ Нова доставка</button>
@@ -318,14 +319,14 @@ export default function Deliveries() {
                   <td className="text-muted text-xs max-w-[160px] truncate">{d.address || '—'}</td>
                   <td>
                     <div className="flex gap-1.5">
-                      <button className="btn-ghost text-xs py-1 px-2" onClick={() => setEditDel(d)}>✏️ Обнови</button>
+                      <button className="btn-ghost text-xs py-1 px-2" onClick={() => setEditDel(d)}><Pencil className="w-3.5 h-3.5" strokeWidth={2} />Обнови</button>
                       {d.status === 'PENDING' && (
                         <button className="btn-ghost text-xs py-1 px-2 text-orange-400"
                           onClick={() => setStatus(d, 'IN_TRANSIT')}>В движение</button>
                       )}
                       {d.status === 'IN_TRANSIT' && (
                         <button className="btn-ghost text-xs py-1 px-2 text-green-400"
-                          onClick={() => setEditDel({ ...d, status: 'DELIVERED' })}>✓ Доставена</button>
+                          onClick={() => setEditDel({ ...d, status: 'DELIVERED' })}><Check className="w-3.5 h-3.5" strokeWidth={2} />Доставена</button>
                       )}
                     </div>
                   </td>

@@ -3,16 +3,22 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { formatDistanceToNow, format, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
+import { Bell, CheckCircle2, Cog, XCircle, Truck, Package, AlertTriangle, OctagonAlert } from 'lucide-react'
 import { PageLoader } from '../components/ui/Spinner'
 
 const TYPE_ICONS = {
-  order_ready:      '✅',
-  order_production: '⚙️',
-  order_cancelled:  '❌',
-  order_delivered:  '🚚',
-  low_stock:        '📦',
-  overdue:          '⚠️',
-  defect:           '🔴',
+  order_ready:      { Icon: CheckCircle2,  color: 'text-green-400' },
+  order_production: { Icon: Cog,           color: 'text-orange-400' },
+  order_cancelled:  { Icon: XCircle,       color: 'text-red-400' },
+  order_delivered:  { Icon: Truck,         color: 'text-blue-400' },
+  low_stock:        { Icon: Package,       color: 'text-yellow-400' },
+  overdue:          { Icon: AlertTriangle, color: 'text-red-400' },
+  defect:           { Icon: OctagonAlert,  color: 'text-red-500' },
+}
+
+function TypeIcon({ type, className }) {
+  const { Icon, color } = TYPE_ICONS[type] || { Icon: Bell, color: 'text-muted' }
+  return <Icon className={`${className} ${color}`} strokeWidth={2} />
 }
 
 const TYPE_LABELS = {
@@ -135,7 +141,7 @@ export default function Notifications() {
         <PageLoader />
       ) : filtered.length === 0 ? (
         <div className="card text-center py-16">
-          <div className="text-5xl mb-4">🔔</div>
+          <Bell className="w-12 h-12 mx-auto mb-4 text-muted" strokeWidth={1.5} />
           <p className="text-lg text-white font-medium">Няма известия</p>
           <p className="text-sm text-muted mt-1">
             {filter === 'unread' ? 'Всички са прочетени' : 'Все още нямате известия'}
@@ -155,7 +161,7 @@ export default function Notifications() {
                       !n.read_at ? 'bg-accent/5' : ''
                     }`}
                   >
-                    <div className="text-2xl flex-shrink-0 mt-0.5">{TYPE_ICONS[n.type] || '🔔'}</div>
+                    <TypeIcon type={n.type} className="w-6 h-6 flex-shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div>

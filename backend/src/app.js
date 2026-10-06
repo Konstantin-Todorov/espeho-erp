@@ -45,6 +45,7 @@ app.use('/api/deliveries',     require('./routes/deliveries'));
 app.use('/api/suppliers',      require('./routes/suppliers'));
 app.use('/api/admin',          require('./routes/admin'));
 app.use('/api/settings',       require('./routes/settings'));
+app.use('/api/options',        require('./routes/options'));
 
 // Health check
 app.get('/api/health', (req, res) => {

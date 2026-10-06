@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { OrderStatusBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
 import { TYPE_LABELS, orderNo, isOverdue } from '../utils/labels'
+import { Zap, AlertTriangle } from 'lucide-react'
 
 const STATUS_DOT = {
   'НОВА':'bg-blue-400','МАТЕРИАЛИ':'bg-yellow-400','ПРОИЗВОДСТВО':'bg-orange-400',
@@ -85,7 +86,7 @@ export default function Calendar() {
                         {format(day, 'd')}
                       </div>
                       <div className="flex gap-0.5">
-                        {hasUrgent && <span className="text-yellow-400 text-xs leading-none">⚡</span>}
+                        {hasUrgent && <Zap className="w-3 h-3 text-yellow-400" strokeWidth={2.25} aria-label="Спешна" />}
                         {hasOverdue && <span className="text-red-400 text-xs leading-none">!</span>}
                       </div>
                     </div>
@@ -127,8 +128,8 @@ export default function Calendar() {
                       <p className="text-sm text-gray-300 mt-0.5">{o.client_name}</p>
                       {o.order_type && <p className="text-xs text-muted mt-0.5">{TYPE_LABELS[o.order_type] || o.order_type}</p>}
                       <div className="flex gap-2 mt-1">
-                        {o.is_urgent && <span className="text-xs text-yellow-400">⚡ Спешна</span>}
-                        {overdue && <span className="text-xs text-red-400">⚠ Просрочена</span>}
+                        {o.is_urgent && <span className="text-xs text-yellow-400 inline-flex items-center gap-1"><Zap className="w-3 h-3" strokeWidth={2} />Спешна</span>}
+                        {overdue && <span className="text-xs text-red-400 inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3" strokeWidth={2} />Просрочена</span>}
                       </div>
                     </Link>
                   )

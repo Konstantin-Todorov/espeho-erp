@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Download } from 'lucide-react'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
@@ -41,10 +42,7 @@ function ExportButton({ data, filename, label = 'Експорт Excel' }) {
       className="btn-secondary text-sm flex items-center gap-2"
       onClick={() => exportCSV(data, filename)}
     >
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-      </svg>
+      <Download className="w-4 h-4" />
       {label}
     </button>
   )
@@ -311,7 +309,7 @@ export default function Reports() {
             <table>
               <thead><tr><th>Номер</th><th>Клиент</th><th>Статус</th><th>Плащане</th><th className="text-right">Цена</th><th className="text-right">Платено</th><th className="text-right">Дължи</th></tr></thead>
               <tbody>
-                {data.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted">Няма неплатени поръчки 🎉</td></tr>}
+                {data.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted">Няма неплатени поръчки</td></tr>}
                 {data.map(o => (
                   <tr key={o.id} className="cursor-pointer" onClick={() => navigate(`/orders/${o.id}`)}>
                     <td className="font-bold text-accent">{orderNo(o)}</td>

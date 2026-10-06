@@ -7,6 +7,7 @@ import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
 import toast from 'react-hot-toast'
 import { SOURCE_LABELS, TYPE_LABELS, orderNo, eur, num, dateBg } from '../utils/labels'
+import { Check, Pencil, X } from 'lucide-react'
 
 // Merge duplicate client records (e.g. "АЛЕМАР" and "Алемар ЕООД") into this one
 function MergeModal({ open, onClose, client, onMerged }) {
@@ -113,10 +114,10 @@ function InlineEdit({ label, value, onSave, type = 'text', textarea = false }) {
               autoFocus
             />
           )}
-          <button onClick={save} disabled={saving} className="btn-primary text-xs py-1 px-2">
-            {saving ? '...' : '✓'}
+          <button onClick={save} disabled={saving} className="btn-primary text-xs py-1 px-2" title="Запази" aria-label="Запази">
+            {saving ? '...' : <Check className="w-4 h-4" strokeWidth={2} />}
           </button>
-          <button onClick={cancel} className="btn-secondary text-xs py-1 px-2">✕</button>
+          <button onClick={cancel} className="btn-secondary text-xs py-1 px-2" title="Откажи" aria-label="Откажи"><X className="w-4 h-4" strokeWidth={2} /></button>
         </div>
       ) : (
         <p
@@ -124,11 +125,7 @@ function InlineEdit({ label, value, onSave, type = 'text', textarea = false }) {
           onClick={start}
         >
           {value || <span className="text-muted italic">—</span>}
-          <svg className="w-3 h-3 text-muted opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0"
-            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
+          <Pencil className="w-3 h-3 text-muted opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0" />
         </p>
       )}
     </div>
@@ -160,7 +157,7 @@ function InlineSelect({ label, value, options, onSave }) {
             {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {saving && <span className="text-muted text-xs">...</span>}
-          <button onClick={() => setEditing(false)} className="btn-secondary text-xs py-1 px-2">✕</button>
+          <button onClick={() => setEditing(false)} className="btn-secondary text-xs py-1 px-2" title="Откажи" aria-label="Откажи"><X className="w-4 h-4" strokeWidth={2} /></button>
         </div>
       ) : (
         <p
@@ -168,11 +165,7 @@ function InlineSelect({ label, value, options, onSave }) {
           onClick={() => { setVal(value || ''); setEditing(true) }}
         >
           {options.find(([v]) => v === value)?.[1] || value || <span className="text-muted italic">—</span>}
-          <svg className="w-3 h-3 text-muted opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0"
-            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
+          <Pencil className="w-3 h-3 text-muted opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0" />
         </p>
       )}
     </div>
@@ -315,7 +308,7 @@ export default function ClientDetail() {
                       onClick={() => navigate(`/orders/${o.id}`)}>
                       <td>
                         <span className="font-bold text-accent">{orderNo(o)}</span>
-                        {o.is_urgent && <span className="ml-1 text-danger text-xs">●</span>}
+                        {o.is_urgent && <span className="ml-1 inline-block w-2 h-2 rounded-full bg-danger align-middle" title="Спешна" />}
                       </td>
                       <td>
                         <div className="flex flex-wrap gap-1">

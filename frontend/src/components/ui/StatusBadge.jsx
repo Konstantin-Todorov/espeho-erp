@@ -54,7 +54,7 @@ export function StageStatusBadge({ status }) {
 }
 
 export function UrgentBadge() {
-  return <span className="badge bg-red-500/20 text-red-400 border border-red-500/30">🔴 Спешна</span>
+  return <span className="badge bg-red-500/20 text-red-400 border border-red-500/30 gap-1.5"><span className="inline-block w-2 h-2 rounded-full bg-danger" />Спешна</span>
 }
 
 export function RoleBadge({ role }) {

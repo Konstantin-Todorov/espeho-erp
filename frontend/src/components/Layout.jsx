@@ -7,6 +7,7 @@ import QuickCreate from './QuickCreate'
 import Spinner from './ui/Spinner'
 import CommandPalette, { useCommandPaletteHotkey } from './CommandPalette'
 import { useAuth } from '../context/AuthContext'
+import { Menu, Search } from 'lucide-react'
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -36,15 +37,13 @@ export default function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile header */}
         <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-surface">
-          <button onClick={() => setMobileOpen(true)} className="text-muted hover:text-white">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+          <button onClick={() => setMobileOpen(true)} className="text-muted hover:text-white" aria-label="Меню">
+            <Menu className="w-6 h-6" strokeWidth={2} />
           </button>
           <span className="font-bold text-white">ЕСПЕХО ERP</span>
           <div className="flex items-center gap-2">
             <button onClick={openPalette} className="p-2 text-muted hover:text-white" aria-label="Търсене">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" /></svg>
+              <Search className="w-5 h-5" strokeWidth={2} />
             </button>
             <QuickCreate compact />
             <NotificationBell />

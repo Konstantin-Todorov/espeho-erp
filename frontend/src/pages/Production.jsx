@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { TYPE_LABELS, orderNo, dateBg, todayStr } from '../utils/labels'
+import { Zap, AlertTriangle, Check, CheckCircle2, Play } from 'lucide-react'
 
 const DONE = ['ГОТОВ', 'ПРОПУСНАТ']
 const deadlinePassed = d => !!d && String(d).slice(0, 10) < todayStr()
@@ -16,7 +17,7 @@ async function updateStage(stageId, status) {
   try {
     const { data } = await api.patch(`/production/stages/${stageId}`, { status })
     if (data.order_ready) toast.success('Поръчката е готова!', { duration: 5000 })
-    else toast.success(status === 'В_ПРОЦЕС' ? 'Започнато' : status === 'ГОТОВ' ? 'Завършено ✓' : 'Етапът е обновен')
+    else toast.success(status === 'В_ПРОЦЕС' ? 'Започнато' : status === 'ГОТОВ' ? 'Завършено' : 'Етапът е обновен')
     return true
   } catch (err) {
     toast.error(err.response?.data?.error || 'Грешка')
@@ -36,7 +37,7 @@ function TaskCard({ task, busy, onAction }) {
           <p className="text-lg font-bold text-white leading-tight">{task.stage_name}</p>
           <p className="text-base text-accent font-semibold mt-0.5">
             {orderNo(task)}
-            {task.is_urgent && <span className="ml-2 text-danger text-sm font-bold">⚡ СПЕШНА</span>}
+            {task.is_urgent && <span className="ml-2 text-danger text-sm font-bold inline-flex items-center gap-1 align-middle"><Zap className="w-4 h-4" strokeWidth={2.25} />СПЕШНА</span>}
           </p>
           <p className="text-base text-gray-200 truncate">{task.client_name}</p>
           <p className="text-sm text-muted">{TYPE_LABELS[task.order_type] || task.order_type || ''}</p>
@@ -44,7 +45,7 @@ function TaskCard({ task, busy, onAction }) {
         <div className="text-right flex-shrink-0">
           {task.deadline ? (
             <span className={`inline-block text-sm px-2 py-1 rounded-lg ${overdue ? 'bg-red-500/20 text-danger font-semibold' : 'bg-border/60 text-muted'}`}>
-              {overdue ? '⚠ ' : ''}Срок {dateBg(task.deadline, 'd MMM')}
+              {overdue && <AlertTriangle className="w-4 h-4 inline-block align-[-3px] mr-1" strokeWidth={2} />}Срок {dateBg(task.deadline, 'd MMM')}
             </span>
           ) : <span className="text-sm text-muted">Без срок</span>}
           {inProgress && <div className="mt-2"><StageStatusBadge status={task.status} /></div>}
@@ -57,7 +58,7 @@ function TaskCard({ task, busy, onAction }) {
             <button type="button" disabled={!task.can_start || busy}
               className="btn-secondary w-full justify-center min-h-[48px] text-base disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => onAction(task, 'В_ПРОЦЕС')}>
-              ▶ Започни
+              <Play className="w-5 h-5" strokeWidth={2.25} />Започни
             </button>
             {!task.can_start && <p className="text-sm text-warning mt-1 text-center">Чака предишния етап</p>}
           </div>
@@ -66,7 +67,7 @@ function TaskCard({ task, busy, onAction }) {
           <button type="button" disabled={busy}
             className="btn-primary flex-1 justify-center min-h-[48px] text-base bg-green-600 hover:bg-green-500 disabled:opacity-50"
             onClick={() => onAction(task, 'ГОТОВ')}>
-            ✓ Готово
+            <Check className="w-5 h-5" strokeWidth={2.5} />Готово
           </button>
         )}
         <button type="button" className="btn-ghost min-h-[48px] px-4 text-base" title="Отвори поръчката"
@@ -116,7 +117,7 @@ function MyWork() {
   if (!tasks.length) {
     return (
       <div className="card text-center py-12">
-        <p className="text-4xl mb-3">✓</p>
+        <CheckCircle2 className="w-10 h-10 mx-auto mb-3 text-green-400" strokeWidth={1.75} />
         <p className="text-base text-white font-medium">Няма задачи в момента</p>
         <p className="text-sm text-muted mt-1">Тук се появяват етапите на поръчки в „ПРОИЗВОДСТВО“, разпределени на вас или свободни.</p>
         <button className="btn-secondary mt-4 min-h-[44px] text-base" onClick={fetchTasks}>↻ Обнови</button>
@@ -172,7 +173,7 @@ function BoardCard({ order, canAct, isAdmin, onUpdate }) {
         <div>
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-accent group-hover:underline">{orderNo(order)}</span>
-            {order.is_urgent && <span className="text-danger text-xs">⚡ Спешна</span>}
+            {order.is_urgent && <span className="text-danger text-xs inline-flex items-center gap-0.5"><Zap className="w-3 h-3" strokeWidth={2.25} />Спешна</span>}
           </div>
           <p className="text-sm text-white mt-0.5">{order.client_name}</p>
           <p className="text-xs text-muted">{TYPE_LABELS[order.order_type] || order.order_type}</p>
@@ -180,7 +181,7 @@ function BoardCard({ order, canAct, isAdmin, onUpdate }) {
         <div className="text-right flex-shrink-0">
           {order.deadline && (
             <span className={`text-xs px-1.5 py-0.5 rounded ${overdue ? 'bg-red-500/20 text-danger' : 'text-muted'}`}>
-              {overdue ? '⚠ ' : ''}{dateBg(order.deadline, 'd MMM')}
+              {overdue && <AlertTriangle className="w-3 h-3 inline-block align-[-2px] mr-1" strokeWidth={2} />}{dateBg(order.deadline, 'd MMM')}
             </span>
           )}
         </div>
@@ -232,7 +233,7 @@ function BoardCard({ order, canAct, isAdmin, onUpdate }) {
                   )}
                   {stage.status === 'В_ПРОЦЕС' && (
                     <button className="px-3 py-1 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 font-medium text-xs transition-colors min-h-[32px]"
-                      onClick={e => handleStageUpdate(e, stage.id, 'ГОТОВ')}>✓ Готово</button>
+                      onClick={e => handleStageUpdate(e, stage.id, 'ГОТОВ')}><Check className="w-3.5 h-3.5 inline-block align-[-2px] mr-1" strokeWidth={2.5} />Готово</button>
                   )}
                 </div>
               )}
@@ -342,7 +343,7 @@ export default function Production() {
                     onClick={() => navigate(`/orders/${order.id}`)}>
                     <td>
                       <span className="text-accent font-bold hover:underline">{orderNo(order)}</span>
-                      {order.is_urgent && <span className="ml-1 text-danger text-xs">⚡</span>}
+                      {order.is_urgent && <Zap className="ml-1 w-3.5 h-3.5 text-danger inline-block align-[-2px]" strokeWidth={2.25} aria-label="Спешна" />}
                     </td>
                     <td>{order.client_name}</td>
                     <td><OrderStatusBadge status={order.status} /></td>

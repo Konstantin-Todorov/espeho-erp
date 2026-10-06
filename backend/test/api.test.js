@@ -230,3 +230,41 @@ test('users: wrong current password is 400 (no logout); deactivation is immediat
 test('demo seeding is disabled', async () => {
   assert.equal((await call('POST', '/admin/seed-demo')).status, 410);
 });
+
+test('option lists: office adds a defect cause, admin renames/hides, stages drive new orders', async () => {
+  const all = await call('GET', '/options', { role: 'production' });
+  assert.ok(all.data.defect_cause.length >= 5);
+  const add = await call('POST', '/options', { role: 'office', body: { list_key: 'defect_cause', label: 'Счупено от клиента' } });
+  assert.equal(add.status, 201);
+  assert.equal((await call('POST', '/options', { role: 'office', body: { list_key: 'stages:стъклопакет', label: 'X' } })).status, 403);
+  assert.equal((await call('PATCH', `/options/${add.data.id}`, { role: 'office', body: { active: false } })).status, 403);
+  assert.equal((await call('PATCH', `/options/${add.data.id}`, { body: { active: false } })).status, 200);
+  const st = await call('POST', '/options', { body: { list_key: 'stages:стъклопакет', label: 'Контрол' } });
+  assert.equal(st.status, 201);
+  const o = await call('POST', '/orders', { role: 'office', body: { client_id: ids.client, order_type: 'стъклопакет',
+    items: [{ product_desc: 'Тест', width: 500, height: 500, unit_price: 10 }] } });
+  const d = await call('GET', `/orders/${o.data.id}`, { role: 'office' });
+  assert.equal(d.data.stages.at(-1).stage_name, 'Контрол');
+  const p = await call('POST', `/orders/${o.data.id}/payments`, { role: 'office', body: { amount: 1, method: 'Наложен платеж' } });
+  assert.equal(p.status, 201, 'payment methods are not a fixed list any more');
+});
+
+test('catalog: selling price and unit; hidden from shop floor', async () => {
+  const c = await call('POST', '/products', { role: 'office', body: { name: 'Кант праволинеен 4мм', uom: 'lm', unit_price: 1.2, sale_price: 2.5, category: 'Обработки' } });
+  assert.equal(c.status, 201);
+  assert.equal(c.data.uom, 'lm');
+  const prod = await call('GET', '/products?q=Кант праволинеен', { role: 'production' });
+  assert.ok(prod.data.length >= 1);
+  assert.equal(prod.data[0].sale_price, undefined);
+  const e = await call('PATCH', `/products/${c.data.id}`, { role: 'office', body: { sale_price: 2.8 } });
+  assert.equal(+e.data.sale_price, 2.8);
+});
+
+test('order history records edits, lines and payments (office only)', async () => {
+  await call('PATCH', `/orders/${ids.order}`, { role: 'office', body: { notes: 'проверка на историята' } });
+  const h = await call('GET', `/orders/${ids.order}/history`, { role: 'office' });
+  assert.equal(h.status, 200);
+  const actions = h.data.map(x => x.action);
+  assert.ok(actions.includes('order_edit') && actions.includes('item_edit') && actions.includes('payment_add'));
+  assert.equal((await call('GET', `/orders/${ids.order}/history`, { role: 'production' })).status, 403);
+});

@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import { bg } from 'date-fns/locale'
 import axios from 'axios'
 import { TYPE_LABELS, orderNo, dateBg } from '../utils/labels'
+import { CalendarDays, Check } from 'lucide-react'
 
 // Customer-facing steps of an order
 const FLOW = [
@@ -92,9 +93,7 @@ export default function TrackOrder() {
 
           {order.deadline && (
             <div className="flex items-center gap-2 text-sm mb-4">
-              <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
+              <CalendarDays className="w-4 h-4 text-muted" />
               <span className="text-muted">Краен срок:</span>
               <span className="text-white font-medium">{dateBg(order.deadline, 'd MMMM yyyy')}</span>
             </div>
@@ -113,7 +112,7 @@ export default function TrackOrder() {
                     <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border
                       ${done ? 'bg-green-500/20 text-green-400 border-green-500/30'
                         : current ? 'bg-accent/20 text-accent border-accent/40' : 'bg-border text-muted border-border'}`}>
-                      {done ? '✓' : i + 1}
+                      {done ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : i + 1}
                     </span>
                     <span className={`text-sm ${done ? 'text-green-400' : current ? 'text-white font-semibold' : 'text-muted'}`}>
                       {f.label}
@@ -149,7 +148,7 @@ export default function TrackOrder() {
               {stages.map((s, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border ${STAGE_STATUS_BG[s.status] || STAGE_STATUS_BG['ЧАКАЩ']}`}>
-                    {s.status === 'ГОТОВ' ? '✓' : i + 1}
+                    {s.status === 'ГОТОВ' ? <Check className="w-4 h-4" strokeWidth={3} /> : i + 1}
                   </div>
                   <div className="flex-1 flex items-center justify-between">
                     <span className={`text-sm ${s.status === 'ГОТОВ' ? 'text-green-400' : s.status === 'В_ПРОЦЕС' ? 'text-white font-medium' : 'text-muted'}`}>

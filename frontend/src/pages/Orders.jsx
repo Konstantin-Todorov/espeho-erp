@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { AlertTriangle, ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
@@ -6,10 +7,11 @@ import { OrderStatusBadge, PaymentStatusBadge, CategoryBadge } from '../componen
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
 import ClientPicker from '../components/ui/ClientPicker'
+import OptionSelect from '../components/ui/OptionSelect'
 import useSettings from '../hooks/useSettings'
 import { priceLine, sumLines } from '../utils/pricing'
 import {
-  TYPE_LABELS, TYPE_OPTIONS, SOURCE_LABELS, SOURCE_OPTIONS, CATEGORY_LABELS, CATEGORY_OPTIONS,
+  TYPE_LABELS, TYPE_OPTIONS, CATEGORY_LABELS, CATEGORY_OPTIONS,
   FULFILLMENT_LABELS, FULFILLMENT_OPTIONS, UOM_LABELS, UOM_HINTS, STATUS_HINTS, PAYMENT_LABELS, INSTALL_LABELS,
   orderNo, eur, num, dateBg, isOverdue,
 } from '../utils/labels'
@@ -17,6 +19,8 @@ import toast from 'react-hot-toast'
 
 const STATUS_OPTIONS = ['НОВА','МАТЕРИАЛИ','ПРОИЗВОДСТВО','ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА']
 const PAGE_SIZE = 30
+
+const UNIT_SHORT = { m2: 'м²', lm: 'л.м.', pcs: 'бр.', fixed: 'сума' }
 
 const emptyLine = type => ({ product_desc: '', product_type: type, width: '', height: '', qty: 1, uom: 'm2', unit_price: '' })
 
@@ -52,16 +56,18 @@ function CatalogPicker({ onSelect, onClose, markupPct, vatPct }) {
           <div key={type}>
             <p className="px-3 py-1.5 text-xs font-semibold text-muted uppercase tracking-wide bg-bg/50">{TYPE_LABELS[type] || type}</p>
             {items.map(t => (
-              <button key={t.id} type="button" onClick={() => { onSelect(t, suggested(t.unit_price)); onClose() }}
+              <button key={t.id} type="button" onClick={() => { onSelect(t, t.sale_price ? +t.sale_price : suggested(t.unit_price)); onClose() }}
                 className="w-full text-left px-3 py-2 hover:bg-border flex justify-between items-center gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-white truncate">{t.name}</p>
                   {t.default_description && <p className="text-xs text-muted">{t.default_description}</p>}
                 </div>
-                {t.unit_price && (
+                {(t.sale_price || t.unit_price) && (
                   <div className="text-right flex-shrink-0">
-                    <p className="text-[11px] text-muted">себест. {(+t.unit_price).toFixed(2)} €</p>
-                    <p className="text-xs text-accent">≈ {suggested(t.unit_price).toFixed(2)} €/м²</p>
+                    {t.unit_price && <p className="text-[11px] text-muted">себест. {(+t.unit_price).toFixed(2)} €</p>}
+                    <p className="text-xs text-accent">
+                      {t.sale_price ? `${(+t.sale_price).toFixed(2)} €` : `≈ ${suggested(t.unit_price).toFixed(2)} €`}/{UNIT_SHORT[t.uom] || 'м²'}
+                    </p>
                   </div>
                 )}
               </button>
@@ -131,12 +137,13 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
   const removeItem = i => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }))
 
   const applyTemplate = (i, tpl, suggested) => {
-    setItem(i, { product_desc: tpl.name, product_type: tpl.order_type,
+    setItem(i, { product_desc: tpl.name, product_type: tpl.order_type === 'друго' ? form.items[i].product_type : tpl.order_type,
+      uom: tpl.uom || 'm2',
       width: tpl.default_width || form.items[i].width, height: tpl.default_height || form.items[i].height,
-      unit_price: form.items[i].unit_price || (suggested ? suggested.toFixed(2) : '') })
+      unit_price: suggested ? suggested.toFixed(2) : form.items[i].unit_price })
     // The order type follows the lines unless they are mixed
-    const types = new Set(form.items.map((it, idx) => idx === i ? tpl.order_type : it.product_type).filter(Boolean))
-    set({ order_type: types.size > 1 ? 'смесена' : tpl.order_type })
+    const types = new Set(form.items.map((it, idx) => idx === i ? tpl.order_type : it.product_type).filter(t => t && t !== 'друго'))
+    if (types.size) set({ order_type: types.size > 1 ? 'смесена' : [...types][0] })
   }
 
   const lines = form.items.filter(it => it.product_desc.trim())
@@ -230,7 +237,7 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
                     </div>
                     <button type="button" className="text-muted hover:text-danger p-2 flex-shrink-0 disabled:opacity-30" title="Премахни реда"
                       onClick={() => removeItem(i)} disabled={form.items.length === 1}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 mt-1.5 pl-7 pr-9">
@@ -289,7 +296,7 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
         {/* More options — rarely needed */}
         <section>
           <button type="button" className="text-sm text-accent hover:underline" onClick={() => setMore(m => !m)}>
-            {more ? '▾' : '▸'} Още настройки (вид, категория, канал, номер от кочана, ръчна цена)
+            {more ? <ChevronDown className="w-4 h-4 inline align-[-3px]" /> : <ChevronRight className="w-4 h-4 inline align-[-3px]" />} Още настройки (вид, категория, канал, номер от кочана, ръчна цена)
           </button>
           {more && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 p-4 rounded-xl border border-border">
@@ -309,9 +316,7 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
               </div>
               <div>
                 <label className="label" htmlFor="o-src">Откъде дойде поръчката</label>
-                <select id="o-src" className="select" value={form.source} onChange={e => set({ source: e.target.value })}>
-                  {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{SOURCE_LABELS[s]}</option>)}
-                </select>
+                <OptionSelect id="o-src" listKey="source" value={form.source} onChange={v => set({ source: v })} />
               </div>
               <div>
                 <label className="label" htmlFor="o-ref">Номер от кочана / офиса</label>
@@ -427,7 +432,7 @@ export default function Orders() {
         </div>
         {isOffice && (
           <button className="btn-primary" onClick={() => { setPresetClient(null); setCreateOpen(true) }}>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            <Plus className="w-4 h-4" />
             Нова поръчка
           </button>
         )}
@@ -470,7 +475,7 @@ export default function Orders() {
             <tbody>
               {orders.length === 0 && (
                 <tr><td colSpan={8} className="text-center py-12 text-muted">
-                  {params.get('q') ? 'Няма поръчки по това търсене' : tab === 'active' ? 'Няма активни поръчки — всичко е предадено 🎉' : 'Няма поръчки'}
+                  {params.get('q') ? 'Няма поръчки по това търсене' : tab === 'active' ? 'Няма активни поръчки — всичко е предадено' : 'Няма поръчки'}
                 </td></tr>
               )}
               {orders.map(o => {
@@ -480,7 +485,7 @@ export default function Orders() {
                   <tr key={o.id} className="cursor-pointer" onClick={() => navigate(`/orders/${o.id}`)}>
                     <td className="whitespace-nowrap">
                       <span className="font-bold text-accent">{orderNo(o)}</span>
-                      {o.is_urgent && <span className="ml-1 text-danger text-xs" title="Спешна">●</span>}
+                      {o.is_urgent && <span className="ml-1.5 inline-block w-2 h-2 rounded-full bg-danger align-middle" title="Спешна" />}
                       {o.external_ref && <div className="text-[11px] text-muted">#{o.order_number}</div>}
                       {o.open_defects > 0 && <span className="badge bg-red-500/20 text-red-400 text-[10px]">{o.open_defects} брак</span>}
                     </td>
@@ -513,7 +518,7 @@ export default function Orders() {
                       ) : <span className="text-muted">—</span>}
                     </td>
                     <td className={`whitespace-nowrap ${overdue ? 'text-danger font-semibold' : 'text-muted'}`}>
-                      {dateBg(o.deadline, 'd MMM')}{overdue && ' ⚠'}
+                      {dateBg(o.deadline, 'd MMM')}{overdue && <AlertTriangle className="w-3.5 h-3.5 inline ml-1 align-[-2px]" />}
                     </td>
                     {canSeePrices && <td className="text-right whitespace-nowrap text-gray-200">{eur(o.sale_price)}</td>}
                     <td className="hidden md:table-cell text-muted text-xs whitespace-nowrap">{dateBg(o.created_at, 'd MMM yy')}</td>

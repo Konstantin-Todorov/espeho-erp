@@ -5,6 +5,7 @@ import Modal from '../components/ui/Modal'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import { dateBg, todayStr, num } from '../utils/labels'
+import { Check, X, Factory, User, Pencil, Phone, Mail, FileText, ClipboardList, PackagePlus } from 'lucide-react'
 
 const fmt = d => dateBg(d)
 
@@ -106,7 +107,7 @@ function ReceiveModal({ poId, onClose, onSaved }) {
           <p className="text-xs text-muted">Количествата се добавят към наличността в избрания склад. Ако приемете по-малко, поръчката остава „Частично приета“.</p>
           <div className="flex gap-3 justify-end">
             <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
-            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Записва...' : '✓ Приеми в склада'}</button>
+            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Записва...' : <><Check className="w-4 h-4" strokeWidth={2} />Приеми в склада</>}</button>
           </div>
         </form>
       )}
@@ -187,7 +188,7 @@ function SupplierFormModal({ open, onClose, onSaved, editData }) {
         <div className="flex gap-3 justify-end">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Записва...' : editData ? '✓ Запази' : '+ Добави'}
+            {loading ? 'Записва...' : editData ? <><Check className="w-4 h-4" strokeWidth={2} />Запази</> : '+ Добави'}
           </button>
         </div>
       </form>
@@ -300,7 +301,7 @@ function POFormModal({ open, onClose, onSaved, suppliers }) {
                   </div>
                   <div className="col-span-1 flex items-center justify-end">
                     <button type="button" onClick={()=>setForm(f=>({...f,items:f.items.filter((_,idx)=>idx!==i)}))}
-                      className="text-danger hover:text-red-400 text-sm">✕</button>
+                      className="text-danger hover:text-red-400 text-sm" title="Премахни реда" aria-label="Премахни реда"><X className="w-4 h-4" strokeWidth={2} /></button>
                   </div>
                 </div>
               </div>
@@ -416,7 +417,7 @@ export default function Suppliers() {
           {tab === 'suppliers' && (
             suppliers.length === 0 ? (
               <div className="card text-center py-16">
-                <div className="text-4xl mb-3">🏭</div>
+                <Factory className="w-10 h-10 mx-auto mb-3 text-muted" strokeWidth={1.5} />
                 <p className="text-white font-semibold mb-1">Няма доставчици</p>
                 {canEditSuppliers && <button className="btn-primary mt-3" onClick={() => { setEditSup(null); setFormOpen(true) }}>+ Нов доставчик</button>}
               </div>
@@ -427,14 +428,14 @@ export default function Suppliers() {
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="font-semibold text-white">{s.name}</h3>
-                        {s.contact && <p className="text-muted text-xs mt-0.5">👤 {s.contact}</p>}
+                        {s.contact && <p className="text-muted text-xs mt-0.5 flex items-center gap-1"><User className="w-3 h-3 flex-shrink-0" strokeWidth={2} />{s.contact}</p>}
                       </div>
-                      {canEditSuppliers && <button className="btn-ghost text-xs py-1 px-2" onClick={() => openEdit(s)}>✏️</button>}
+                      {canEditSuppliers && <button className="btn-ghost text-xs py-1 px-2" onClick={() => openEdit(s)} title="Редактирай" aria-label="Редактирай"><Pencil className="w-3.5 h-3.5" strokeWidth={2} /></button>}
                     </div>
                     <div className="space-y-1.5 text-sm">
-                      {s.phone && <p className="text-muted">📞 {s.phone}</p>}
-                      {s.email && <p className="text-muted">✉️ {s.email}</p>}
-                      {s.vat_number && <p className="text-muted">📋 {s.vat_number}</p>}
+                      {s.phone && <p className="text-muted flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2} />{s.phone}</p>}
+                      {s.email && <p className="text-muted flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2} />{s.email}</p>}
+                      {s.vat_number && <p className="text-muted flex items-center gap-1.5"><FileText className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2} />{s.vat_number}</p>}
                     </div>
                     <div className="border-t border-border mt-3 pt-3 flex justify-between text-xs text-muted">
                       <span>{s.po_count} поръчки</span>
@@ -450,7 +451,7 @@ export default function Suppliers() {
           {tab === 'pos' && (
             pos.length === 0 ? (
               <div className="card text-center py-16">
-                <div className="text-4xl mb-3">📋</div>
+                <ClipboardList className="w-10 h-10 mx-auto mb-3 text-muted" strokeWidth={1.5} />
                 <p className="text-white font-semibold mb-1">Няма поръчки към доставчици</p>
                 <button className="btn-primary mt-3" onClick={() => setPOFormOpen(true)}>+ Нова поръчка към доставчик</button>
               </div>
@@ -491,7 +492,7 @@ export default function Suppliers() {
                             )}
                             {OPEN_PO.includes(po.status) && (
                               <button className="btn-ghost text-xs py-1 px-2 text-green-400"
-                                onClick={() => setReceivePO(po.id)}>📥 Приеми стоката</button>
+                                onClick={() => setReceivePO(po.id)}><PackagePlus className="w-3.5 h-3.5" strokeWidth={2} />Приеми стоката</button>
                             )}
                             {['DRAFT','SENT'].includes(po.status) && (
                               <button className="btn-ghost text-xs py-1 px-2 text-danger"

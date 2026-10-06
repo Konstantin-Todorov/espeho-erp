@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { Plus, ClipboardList, UserPlus, FileText, Truck, AlertTriangle, PackagePlus, ShoppingCart } from 'lucide-react'
 
 // "+ Нов" — create anything from anywhere. Each entry opens the right page with its form already open
 // (pages react to ?new=...). Only actions the user's role may perform are listed.
 const ACTIONS = [
-  { label: 'Поръчка',               hint: 'нова поръчка за клиент',   to: '/orders?new=1',          roles: ['admin','office'] },
-  { label: 'Клиент',                hint: 'нов клиент',               to: '/clients?new=1',         roles: ['admin','office'] },
-  { label: 'Оферта',                hint: 'ценова оферта',            to: '/quotations?new=1',      roles: ['admin','office'] },
-  { label: 'Доставка',              hint: 'насрочи доставка',         to: '/deliveries?new=1',      roles: ['admin','office','warehouse'] },
-  { label: 'Брак',                  hint: 'запиши счупено/дефектно',  to: '/defects?new=1',         roles: ['admin','office','production'] },
-  { label: 'Приемане на стока',     hint: 'вкарай материал в склада', to: '/warehouse?new=receive', roles: ['admin','warehouse'] },
-  { label: 'Поръчка към доставчик', hint: 'заяви материали',          to: '/suppliers?new=1',       roles: ['admin','office','warehouse'] },
+  { label: 'Поръчка',               icon: ClipboardList, hint: 'нова поръчка за клиент',   to: '/orders?new=1',          roles: ['admin','office'] },
+  { label: 'Клиент',                icon: UserPlus, hint: 'нов клиент',               to: '/clients?new=1',         roles: ['admin','office'] },
+  { label: 'Оферта',                icon: FileText, hint: 'ценова оферта',            to: '/quotations?new=1',      roles: ['admin','office'] },
+  { label: 'Доставка',              icon: Truck, hint: 'насрочи доставка',         to: '/deliveries?new=1',      roles: ['admin','office','warehouse'] },
+  { label: 'Брак',                  icon: AlertTriangle, hint: 'запиши счупено/дефектно',  to: '/defects?new=1',         roles: ['admin','office','production'] },
+  { label: 'Приемане на стока',     icon: PackagePlus, hint: 'вкарай материал в склада', to: '/warehouse?new=receive', roles: ['admin','warehouse'] },
+  { label: 'Поръчка към доставчик', icon: ShoppingCart, hint: 'заяви материали',          to: '/suppliers?new=1',       roles: ['admin','office','warehouse'] },
 ]
 
 export default function QuickCreate({ onNavigate, compact }) {
@@ -43,18 +44,19 @@ export default function QuickCreate({ onNavigate, compact }) {
       <button type="button" onClick={() => setOpen(o => !o)}
         className={`btn-primary w-full justify-center ${compact ? 'px-3 py-1.5 text-sm' : ''}`}
         aria-haspopup="menu" aria-expanded={open}>
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-        </svg>
+        <Plus className="w-4 h-4" strokeWidth={2.5} />
         Нов
       </button>
       {open && (
         <div role="menu" className={`absolute z-50 mt-1 ${compact ? 'right-0 w-64' : 'left-0 right-0'} bg-surface border border-border rounded-xl shadow-2xl py-1`}>
           {actions.map(a => (
             <button key={a.to} role="menuitem" type="button" onClick={() => go(a)}
-              className="w-full text-left px-3 py-2 hover:bg-border transition-colors">
-              <span className="block text-sm font-medium text-white">{a.label}</span>
-              <span className="block text-xs text-muted">{a.hint}</span>
+              className="w-full text-left px-3 py-2 hover:bg-border transition-colors flex items-start gap-2.5">
+              <a.icon className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted" strokeWidth={2} />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-white">{a.label}</span>
+                <span className="block text-xs text-muted">{a.hint}</span>
+              </span>
             </button>
           ))}
         </div>

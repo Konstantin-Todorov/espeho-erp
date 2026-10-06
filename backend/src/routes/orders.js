@@ -6,6 +6,8 @@ const notify = require('../utils/notify');
 const { sendEmail, orderReadyEmail } = require('../utils/email');
 const { canSeeMoney, stripMoney, ORDER_FIELDS, ITEM_FIELDS, COST_FIELDS, DEFECT_FIELDS, LABOR_FIELDS } = require('../utils/financial');
 const { getSettings, priceLine, sumLines, n } = require('../utils/pricing');
+const { stageTemplate } = require('./options');
+const { audit, diff } = require('../utils/audit');
 
 const router = express.Router();
 router.use(auth);
@@ -87,7 +89,11 @@ async function insertItems(client, orderId, items, orderType, settings) {
 }
 
 async function createStages(client, orderId, orderType) {
-  const stages = STAGE_TEMPLATES[orderType] || STAGE_TEMPLATES['стъклопакет'];
+  // Stages are configured in Настройки → Етапи; the built-in template is only a fallback
+  const configured = await stageTemplate(orderType, client);
+  const stages = configured.length
+    ? configured.map((name, i) => ({ name, order: i + 1 }))
+    : STAGE_TEMPLATES[orderType] || STAGE_TEMPLATES['стъклопакет'];
   for (const s of stages) {
     await client.query('INSERT INTO production_stages (order_id, stage_name, stage_order) VALUES ($1,$2,$3)',
       [orderId, s.name, s.order]);
@@ -197,6 +203,15 @@ router.get('/price-hints', roleCheck('admin', 'office'), async (req, res) => {
       : { rows: [] },
   ]);
   res.json({ usual: usual.rows[0].n ? usual.rows[0] : null, client_last: last.rows[0] || null });
+});
+
+// ─── GET /api/orders/:id/history — edits, line and payment changes (office/admin) ─
+router.get('/:id/history', roleCheck('admin', 'office'), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT a.id, a.action, a.old_data, a.new_data, a.created_at, u.name AS user_name
+     FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
+     WHERE a.table_name = 'orders' AND a.record_id = $1 ORDER BY a.created_at`, [req.params.id]);
+  res.json(rows);
 });
 
 // ─── GET /api/orders/:id — full detail ──────────────────────────────────────────
@@ -427,10 +442,15 @@ router.patch('/:id', roleCheck('admin', 'office'), async (req, res) => {
     }
     if (!sets.length) return res.status(400).json({ error: 'Няма промени' });
     params.push(req.user.id, req.params.id);
+    const { rows: [before] } = await pool.query('SELECT * FROM orders WHERE id=$1', [req.params.id]);
     const { rows } = await pool.query(
       `UPDATE orders SET ${sets.join(', ')}, updated_by=$${params.length - 1}, updated_at=NOW()
        WHERE id=$${params.length} RETURNING *`, params);
     if (!rows[0]) return res.status(404).json({ error: 'Поръчката не е намерена' });
+    const changes = diff(before, rows[0], Object.keys(EDITABLE));
+    if (Object.keys(changes).length) {
+      await audit({ user: req.user, action: 'order_edit', table: 'orders', id: rows[0].id, after: changes });
+    }
     res.json(rows[0]);
   } catch (err) { send(res, err); }
 });
@@ -452,7 +472,11 @@ router.post('/:id/items', roleCheck('admin', 'office'), async (req, res) => {
     await syncSalePrice(client, o.id, sumLines(before));
     return it;
   }).catch(err => send(res, err));
-  if (item) res.status(201).json(item);
+  if (item) {
+    await audit({ user: req.user, action: 'item_add', table: 'orders', id: req.params.id,
+      after: { desc: item.product_desc, size: [item.width, item.height], qty: item.qty, line_total: item.line_total } });
+    res.status(201).json(item);
+  }
 });
 
 router.patch('/:id/items/:itemId', roleCheck('admin', 'office'), async (req, res) => {
@@ -473,6 +497,11 @@ router.patch('/:id/items/:itemId', roleCheck('admin', 'office'), async (req, res
       [next.product_type, String(next.product_desc).trim(), n(next.width), n(next.height), p.qty,
        n(next.unit_price), p.uom, p.area_m2, p.billed_qty, p.line_total, next.notes || null, cur.id]);
     await syncSalePrice(client, req.params.id, sumLines(before));
+    const changes = diff(cur, it, ['product_desc', 'width', 'height', 'qty', 'unit_price', 'uom', 'line_total']);
+    if (Object.keys(changes).length) {
+      await audit({ db: client, user: req.user, action: 'item_edit', table: 'orders', id: req.params.id,
+        after: { desc: it.product_desc, ...changes } });
+    }
     return it;
   }).catch(err => send(res, err));
   if (item) res.json(item);
@@ -481,9 +510,11 @@ router.patch('/:id/items/:itemId', roleCheck('admin', 'office'), async (req, res
 router.delete('/:id/items/:itemId', roleCheck('admin', 'office'), async (req, res) => {
   const ok = await tx(async client => {
     const { rows: before } = await client.query('SELECT line_total FROM order_items WHERE order_id=$1', [req.params.id]);
-    const { rowCount } = await client.query(
-      'DELETE FROM order_items WHERE id=$1 AND order_id=$2', [req.params.itemId, req.params.id]);
-    if (!rowCount) throw new HttpError(404, 'Артикулът не е намерен');
+    const { rows: gone } = await client.query(
+      'DELETE FROM order_items WHERE id=$1 AND order_id=$2 RETURNING product_desc, line_total', [req.params.itemId, req.params.id]);
+    if (!gone.length) throw new HttpError(404, 'Артикулът не е намерен');
+    await audit({ db: client, user: req.user, action: 'item_delete', table: 'orders', id: req.params.id,
+      before: { desc: gone[0].product_desc, line_total: gone[0].line_total } });
     await syncSalePrice(client, req.params.id, sumLines(before));
     return true;
   }).catch(err => send(res, err));
@@ -512,6 +543,8 @@ router.post('/:id/payments', roleCheck('admin', 'office'), async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [o.id, amount, req.body.method || 'брой', req.body.paid_at || new Date().toISOString().slice(0, 10),
        req.body.notes || null, req.user.id]);
+    await audit({ db: client, user: req.user, action: 'payment_add', table: 'orders', id: o.id,
+      after: { amount: p.amount, method: p.method } });
     return { payment: p, ...(await refreshPaymentStatus(client, o.id)) };
   }).catch(err => send(res, err));
   if (result) res.status(201).json(result);
@@ -519,9 +552,11 @@ router.post('/:id/payments', roleCheck('admin', 'office'), async (req, res) => {
 
 router.delete('/:id/payments/:paymentId', roleCheck('admin', 'office'), async (req, res) => {
   const result = await tx(async client => {
-    const { rowCount } = await client.query('DELETE FROM payments WHERE id=$1 AND order_id=$2',
+    const { rows: gone } = await client.query('DELETE FROM payments WHERE id=$1 AND order_id=$2 RETURNING amount, method',
       [req.params.paymentId, req.params.id]);
-    if (!rowCount) throw new HttpError(404, 'Плащането не е намерено');
+    if (!gone.length) throw new HttpError(404, 'Плащането не е намерено');
+    await audit({ db: client, user: req.user, action: 'payment_delete', table: 'orders', id: req.params.id,
+      before: { amount: gone[0].amount, method: gone[0].method } });
     return refreshPaymentStatus(client, req.params.id);
   }).catch(err => send(res, err));
   if (result) res.json(result);

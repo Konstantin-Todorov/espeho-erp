@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Banknote, BarChart3, BookOpen, ChevronDown, ClipboardList, Cog, Factory, HardHat, Lightbulb, Maximize2, Monitor, Package, Plus, Ruler, Search, ShieldCheck, Wrench } from 'lucide-react'
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ const ROLES = [
   {
     name: 'Администратор',
     key: 'admin',
-    emoji: '👑',
+    icon: ShieldCheck,
     color: 'text-accent border-accent/30 bg-accent/5',
     dotColor: 'bg-accent',
     tagColor: 'bg-accent/10 text-accent border-accent/20',
@@ -78,7 +79,7 @@ const ROLES = [
   {
     name: 'Офис',
     key: 'office',
-    emoji: '🖥️',
+    icon: Monitor,
     color: 'text-blue-400 border-blue-400/30 bg-blue-400/5',
     dotColor: 'bg-blue-400',
     tagColor: 'bg-blue-400/10 text-blue-400 border-blue-400/20',
@@ -94,7 +95,7 @@ const ROLES = [
   {
     name: 'Цех (производство)',
     key: 'production',
-    emoji: '⚙️',
+    icon: HardHat,
     color: 'text-orange-400 border-orange-400/30 bg-orange-400/5',
     dotColor: 'bg-orange-400',
     tagColor: 'bg-orange-400/10 text-orange-400 border-orange-400/20',
@@ -110,7 +111,7 @@ const ROLES = [
   {
     name: 'Склад',
     key: 'warehouse',
-    emoji: '📦',
+    icon: Package,
     color: 'text-green-400 border-green-400/30 bg-green-400/5',
     dotColor: 'bg-green-400',
     tagColor: 'bg-green-400/10 text-green-400 border-green-400/20',
@@ -135,12 +136,12 @@ const STEPS = [
 ]
 
 const TIPS = [
-  { icon: '➕', title: 'Бутон „+ Нов“', desc: 'Бързо създаване от всяка страница: поръчка, оферта, клиент, доставка, брак, поръчка към доставчик, приемане на стока.' },
-  { icon: '💶', title: 'Цените са с ДДС', desc: 'Всички цени в поръчки и оферти са крайни, с ДДС — както в таблицата. Себестойността е без ДДС.' },
-  { icon: '📐', title: 'Мерни единици', desc: '€/м² — по размерите (Ш × В в мм); €/л.м. — по периметъра (кант, фасет); €/бр. — отвори, панти, артикули; „Сума“ — фиксирана сума (транспорт, монтаж).' },
-  { icon: '📏', title: 'Минимална площ', desc: 'Малките стъкла се таксуват минимум 0,4 м² за стъклопакет и 0,2 м² за единично стъкло (на брой). Стойностите се сменят от „Настройки“. Ред под минимума показва „мин.“.' },
-  { icon: '🔎', title: 'Търсене по стар номер', desc: 'Оригиналният номер от таблицата (напр. 326-00160) се показва вместо вътрешния и се търси навсякъде — в горното търсене и в списъка с поръчки.' },
-  { icon: '🏭', title: 'Приемане на стока', desc: 'Доставчици → Поръчки към доставчици → „Приеми стоката“: изберете склад и количества. Наличността се обновява сама; непълна доставка остава „Частично приета“.' },
+  { icon: Plus, title: 'Бутон „+ Нов“', desc: 'Бързо създаване от всяка страница: поръчка, оферта, клиент, доставка, брак, поръчка към доставчик, приемане на стока.' },
+  { icon: Banknote, title: 'Цените са с ДДС', desc: 'Всички цени в поръчки и оферти са крайни, с ДДС — както в таблицата. Себестойността е без ДДС.' },
+  { icon: Ruler, title: 'Мерни единици', desc: '€/м² — по размерите (Ш × В в мм); €/л.м. — по периметъра (кант, фасет); €/бр. — отвори, панти, артикули; „Сума“ — фиксирана сума (транспорт, монтаж).' },
+  { icon: Maximize2, title: 'Минимална площ', desc: 'Малките стъкла се таксуват минимум 0,4 м² за стъклопакет и 0,2 м² за единично стъкло (на брой). Стойностите се сменят от „Настройки“. Ред под минимума показва „мин.“.' },
+  { icon: Search, title: 'Търсене по стар номер', desc: 'Оригиналният номер от таблицата (напр. 326-00160) се показва вместо вътрешния и се търси навсякъде — в горното търсене и в списъка с поръчки.' },
+  { icon: Factory, title: 'Приемане на стока', desc: 'Доставчици → Поръчки към доставчици → „Приеми стоката“: изберете склад и количества. Наличността се обновява сама; непълна доставка остава „Частично приета“.' },
 ]
 
 const FAQ = [
@@ -202,10 +203,7 @@ function FAQItem({ q, a }) {
     <div className={`border border-border rounded-xl overflow-hidden transition-colors ${open ? 'bg-surface/60' : 'bg-surface/20'}`}>
       <button className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left" onClick={() => setOpen(o => !o)}>
         <span className="font-medium text-white text-sm">{q}</span>
-        <svg className={`w-4 h-4 text-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDown className={`w-4 h-4 text-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="px-5 pb-4">
@@ -238,7 +236,7 @@ export default function Guide() {
     <div className="max-w-5xl mx-auto">
       {/* Page header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">📘 Ръководство за потребителя</h1>
+        <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3"><BookOpen className="w-8 h-8 text-accent flex-shrink-0" strokeWidth={1.75} />Ръководство за потребителя</h1>
         <p className="text-muted">Кратко и практично: как минава една поръчка, кой какво прави и как се смятат цените.</p>
       </div>
 
@@ -260,12 +258,12 @@ export default function Guide() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {[
-            { icon: '📋', title: 'Поръчки', text: 'Всяка поръчка — от офертата до предаването, плащането и монтажа. Номерът от таблицата (326-…) се пази и търси.' },
-            { icon: '⚙️', title: 'Производство', text: 'Работниците виждат задачите си на телефона в „Моите задачи“ и отбелязват „Започни“ / „Готово“ за всеки етап.' },
-            { icon: '📊', title: 'Финанси', text: 'Цени с ДДС, плащания, себестойност (материали + труд + машини) и марж. Виждат се само от офиса и администратора.' },
+            { icon: ClipboardList, title: 'Поръчки', text: 'Всяка поръчка — от офертата до предаването, плащането и монтажа. Номерът от таблицата (326-…) се пази и търси.' },
+            { icon: Cog, title: 'Производство', text: 'Работниците виждат задачите си на телефона в „Моите задачи“ и отбелязват „Започни“ / „Готово“ за всеки етап.' },
+            { icon: BarChart3, title: 'Финанси', text: 'Цени с ДДС, плащания, себестойност (материали + труд + машини) и марж. Виждат се само от офиса и администратора.' },
           ].map(c => (
             <div key={c.title} className="card">
-              <div className="text-3xl mb-3">{c.icon}</div>
+              <c.icon className="w-8 h-8 mb-3 text-accent" strokeWidth={1.75} />
               <h3 className="font-semibold text-white mb-2">{c.title}</h3>
               <p className="text-sm text-gray-400 leading-relaxed">{c.text}</p>
             </div>
@@ -274,7 +272,7 @@ export default function Guide() {
 
         <div className="card border-accent/20 bg-accent/5">
           <div className="flex gap-3 items-start">
-            <span className="text-2xl">💡</span>
+            <Lightbulb className="w-6 h-6 text-accent flex-shrink-0" strokeWidth={1.75} />
             <div>
               <p className="font-semibold text-white mb-1">Основна идея</p>
               <p className="text-sm text-gray-300 leading-relaxed">
@@ -293,7 +291,7 @@ export default function Guide() {
             {TIPS.map(m => (
               <div key={m.title} className="card hover:border-border/80 transition-colors">
                 <div className="flex gap-3 items-start">
-                  <span className="text-xl flex-shrink-0">{m.icon}</span>
+                  <m.icon className="w-5 h-5 flex-shrink-0 mt-0.5 text-accent" strokeWidth={2} />
                   <div>
                     <p className="font-medium text-white text-sm">{m.title}</p>
                     <p className="text-xs text-gray-400 mt-1 leading-relaxed">{m.desc}</p>
@@ -384,7 +382,7 @@ export default function Guide() {
           {ROLES.map(role => (
             <div key={role.key} className={`card border ${role.color.split(' ').find(c => c.startsWith('border-'))}`}>
               <div className="flex items-center gap-3 mb-3">
-                <span className="text-2xl">{role.emoji}</span>
+                <role.icon className={`w-6 h-6 flex-shrink-0 ${role.color.split(' ')[0]}`} strokeWidth={1.75} />
                 <div>
                   <h3 className={`font-bold text-lg ${role.color.split(' ')[0]}`}>{role.name}</h3>
                   <p className="text-xs text-muted">{role.summary}</p>
@@ -417,24 +415,24 @@ export default function Guide() {
                   <th className="text-left py-2 pr-6 text-muted font-medium">Модул</th>
                   {ROLES.map(r => (
                     <th key={r.key} className={`text-center py-2 px-3 font-medium ${r.color.split(' ')[0]}`}>
-                      {r.emoji} {r.name}
+                      <r.icon className="w-4 h-4 inline-block align-[-3px] mr-1" strokeWidth={2} />{r.name}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {[
-                  { m: 'Поръчки',      admin: '★ Пълен', office: '★ Пълен', production: 'Без цени',      warehouse: 'Без цени' },
-                  { m: 'Оферти',       admin: '★ Пълен', office: '★ Пълен', production: '—',             warehouse: '—' },
-                  { m: 'Клиенти',      admin: '★ Пълен', office: '★ Пълен', production: '—',             warehouse: '—' },
-                  { m: 'Производство', admin: '★ Пълен', office: '★ Пълен', production: '★ Пълен',      warehouse: '—' },
-                  { m: 'Брак',         admin: '★ Пълен', office: '★ Пълен', production: 'Без суми',      warehouse: '—' },
-                  { m: 'Склад',        admin: '★ Пълен', office: 'Изписване',  production: '—',          warehouse: '★ Пълен' },
-                  { m: 'Доставчици',   admin: '★ Пълен', office: '★ Пълен', production: '—',             warehouse: 'Поръчки и приемане' },
-                  { m: 'Доставки',     admin: '★ Пълен', office: '★ Пълен', production: '—',             warehouse: '★ Пълен' },
-                  { m: 'Машини',       admin: '★ Пълен', office: '—',        production: 'Без разходи',  warehouse: '—' },
-                  { m: 'Отчети и цени',admin: '★ Пълен', office: '★ Пълен', production: '—',             warehouse: '—' },
-                  { m: 'Потребители, Настройки', admin: '★ Пълен', office: '—', production: '—',         warehouse: '—' },
+                  { m: 'Поръчки',      admin: 'Пълен', office: 'Пълен', production: 'Без цени',      warehouse: 'Без цени' },
+                  { m: 'Оферти',       admin: 'Пълен', office: 'Пълен', production: '—',             warehouse: '—' },
+                  { m: 'Клиенти',      admin: 'Пълен', office: 'Пълен', production: '—',             warehouse: '—' },
+                  { m: 'Производство', admin: 'Пълен', office: 'Пълен', production: 'Пълен',      warehouse: '—' },
+                  { m: 'Брак',         admin: 'Пълен', office: 'Пълен', production: 'Без суми',      warehouse: '—' },
+                  { m: 'Склад',        admin: 'Пълен', office: 'Изписване',  production: '—',          warehouse: 'Пълен' },
+                  { m: 'Доставчици',   admin: 'Пълен', office: 'Пълен', production: '—',             warehouse: 'Поръчки и приемане' },
+                  { m: 'Доставки',     admin: 'Пълен', office: 'Пълен', production: '—',             warehouse: 'Пълен' },
+                  { m: 'Машини',       admin: 'Пълен', office: '—',        production: 'Без разходи',  warehouse: '—' },
+                  { m: 'Отчети и цени',admin: 'Пълен', office: 'Пълен', production: '—',             warehouse: '—' },
+                  { m: 'Потребители, Настройки', admin: 'Пълен', office: '—', production: '—',         warehouse: '—' },
                 ].map((row, i) => (
                   <tr key={i} className="border-b border-border/30 hover:bg-surface/40">
                     <td className="py-2.5 pr-6 text-gray-300 font-medium">{row.m}</td>
@@ -442,8 +440,8 @@ export default function Guide() {
                       <td key={role} className="text-center py-2.5 px-3">
                         {row[role] === '—'
                           ? <span className="text-muted">—</span>
-                          : row[role].startsWith('★')
-                            ? <span className="text-green-400 text-xs font-medium">{row[role].replace('★ ','')}</span>
+                          : row[role] === 'Пълен'
+                            ? <span className="text-green-400 text-xs font-medium">{row[role]}</span>
                             : <span className="text-yellow-400 text-xs">{row[role]}</span>
                         }
                       </td>
@@ -467,7 +465,7 @@ export default function Guide() {
 
         <div className="card mt-8 border-border/50 bg-surface/30">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🛠️</span>
+            <Wrench className="w-6 h-6 text-muted flex-shrink-0" strokeWidth={1.75} />
             <div>
               <p className="font-semibold text-white">Имате проблем или въпрос?</p>
               <p className="text-sm text-muted mt-0.5">Свържете се с администратора на системата или пишете в коментарите на съответната поръчка.</p>

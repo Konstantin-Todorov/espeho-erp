@@ -4,15 +4,21 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
+import { Bell, CheckCircle2, Cog, XCircle, Truck, Package, AlertTriangle, OctagonAlert } from 'lucide-react'
 
 const TYPE_ICONS = {
-  order_ready:      '✅',
-  order_production: '⚙️',
-  order_cancelled:  '❌',
-  order_delivered:  '🚚',
-  low_stock:        '📦',
-  overdue:          '⚠️',
-  defect:           '🔴',
+  order_ready:      { Icon: CheckCircle2,  color: 'text-green-400' },
+  order_production: { Icon: Cog,           color: 'text-orange-400' },
+  order_cancelled:  { Icon: XCircle,       color: 'text-red-400' },
+  order_delivered:  { Icon: Truck,         color: 'text-blue-400' },
+  low_stock:        { Icon: Package,       color: 'text-yellow-400' },
+  overdue:          { Icon: AlertTriangle, color: 'text-red-400' },
+  defect:           { Icon: OctagonAlert,  color: 'text-red-500' },
+}
+
+function TypeIcon({ type, className }) {
+  const { Icon, color } = TYPE_ICONS[type] || { Icon: Bell, color: 'text-muted' }
+  return <Icon className={`${className} ${color}`} strokeWidth={2} />
 }
 
 export default function NotificationBell() {
@@ -104,7 +110,7 @@ export default function NotificationBell() {
       <div className="max-h-96 overflow-y-auto divide-y divide-border/50">
         {notifications.length === 0 ? (
           <div className="text-center py-8 text-muted text-sm">
-            <div className="text-2xl mb-2">🔔</div>
+            <Bell className="w-6 h-6 mx-auto mb-2" strokeWidth={1.75} />
             Няма известия
           </div>
         ) : (
@@ -114,7 +120,7 @@ export default function NotificationBell() {
               onClick={() => handleClick(n)}
               className={`w-full text-left px-4 py-3 hover:bg-border/30 transition-colors flex gap-3 items-start ${!n.read_at ? 'bg-accent/5' : ''}`}
             >
-              <span className="text-lg flex-shrink-0 mt-0.5">{TYPE_ICONS[n.type] || '🔔'}</span>
+              <TypeIcon type={n.type} className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className={`text-sm leading-tight ${!n.read_at ? 'text-white font-medium' : 'text-gray-300'}`}>
                   {n.title}
@@ -142,10 +148,7 @@ export default function NotificationBell() {
         className="relative p-2 rounded-lg hover:bg-border transition-colors text-muted hover:text-white"
         title="Известия"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round"
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-        </svg>
+        <Bell className="w-5 h-5" strokeWidth={2} />
         {unread > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1
             bg-danger text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">

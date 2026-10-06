@@ -7,6 +7,7 @@ import { PageLoader } from '../components/ui/Spinner'
 import HandoverDialog from '../components/order/HandoverDialog'
 import { PaymentStatusBadge } from '../components/ui/StatusBadge'
 import { FULFILLMENT_LABELS, orderNo, eur, dateBg, todayStr } from '../utils/labels'
+import { Wrench, Truck, Phone } from 'lucide-react'
 
 // "Работен ден" — the office runs the day from one screen. Every active order sits in the column
 // of what has to happen next, and the card's button does exactly that next step.
@@ -48,7 +49,7 @@ function Card({ o, col, onAction, canSeePrices, busy, draggable }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-bold text-accent text-sm leading-tight">
-            {orderNo(o)} {o.is_urgent && <span className="text-danger" title="Спешна">●</span>}
+            {orderNo(o)} {o.is_urgent && <span className="inline-block w-2 h-2 rounded-full bg-danger align-middle" title="Спешна" />}
           </p>
           <p className="text-sm text-white truncate">{o.client_name}</p>
         </div>
@@ -56,7 +57,7 @@ function Card({ o, col, onAction, canSeePrices, busy, draggable }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
-        {o.fulfillment && o.fulfillment !== 'вземане' && <span>{o.fulfillment === 'монтаж' ? '🔧' : '🚚'} {FULFILLMENT_LABELS[o.fulfillment]}</span>}
+        {o.fulfillment && o.fulfillment !== 'вземане' && <span className="inline-flex items-center gap-1">{o.fulfillment === 'монтаж' ? <Wrench className="w-3 h-3" strokeWidth={2} /> : <Truck className="w-3 h-3" strokeWidth={2} />} {FULFILLMENT_LABELS[o.fulfillment]}</span>}
         {+o.total_m2 > 0 && <span>{(+o.total_m2).toLocaleString('bg-BG', { maximumFractionDigits: 1 })} м²</span>}
         {o.status === 'МАТЕРИАЛИ' && <span className="text-yellow-400">чака материали</span>}
       </div>
@@ -81,8 +82,8 @@ function Card({ o, col, onAction, canSeePrices, busy, draggable }) {
         </div>
         <div className="flex items-center gap-1">
           {o.client_phone && (
-            <a href={`tel:${o.client_phone}`} title={`Обади се: ${o.client_phone}`}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-white hover:bg-border">📞</a>
+            <a href={`tel:${o.client_phone}`} title={`Обади се: ${o.client_phone}`} aria-label={`Обади се: ${o.client_phone}`}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-white hover:bg-border"><Phone className="w-4 h-4" strokeWidth={2} /></a>
           )}
           {col.next && (!col.money || canSeePrices) && (
             <button disabled={busy} onClick={() => onAction(o, col)}
