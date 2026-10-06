@@ -19,7 +19,8 @@ import sys, re, datetime
 import openpyxl
 
 SRC, OUT = sys.argv[1], sys.argv[2]
-DATE_MIN, DATE_MAX = datetime.date(2025, 11, 1), datetime.date(2026, 7, 31)
+DATE_MIN = datetime.date(2025, 11, 1)
+DATE_MAX = datetime.date.today() + datetime.timedelta(days=7)   # later dates are typos
 WALKIN = 'КЛИЕНТ НА МЯСТО (БЕЗ ИМЕ)'
 CHANNEL_ONLY = {'', 'ОФИС', 'ОТ ЦЕХ', 'ЦЕХ', 'М-Ж', 'Д-КА', 'МЖ', 'ДКА'}
 CLAIM_RE = re.compile(r'РЕКЛАМАЦ|СЧУП|ИЗПУС|ПЕТН|ДОПЪЛН', re.I)
@@ -108,8 +109,31 @@ def q(v):
     return "'" + str(v).replace("'", "''") + "'"
 
 
-ws = openpyxl.load_workbook(SRC, data_only=True, read_only=True)['Sheet1']
-rows = list(ws.iter_rows(values_only=True))[1:]
+def open_workbook(path):
+    """Numbers/WPS exports sometimes contain a table definition openpyxl rejects ("ref=1:30934").
+    In that case the file is repacked without the table part (the cell data is untouched)."""
+    try:
+        return openpyxl.load_workbook(path, data_only=True, read_only=True)
+    except ValueError:
+        import zipfile, tempfile, re as _re
+        tmp = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False).name
+        with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                if item.filename.startswith('xl/tables/'):
+                    continue
+                data = zin.read(item.filename)
+                if item.filename.startswith('xl/worksheets/_rels/'):
+                    data = _re.sub(rb'<Relationship [^>]*tables/[^>]*/>', b'', data)
+                elif item.filename.startswith('xl/worksheets/sheet'):
+                    data = _re.sub(rb'<tableParts.*?</tableParts>', b'', data, flags=_re.S)
+                elif item.filename == '[Content_Types].xml':
+                    data = _re.sub(rb'<Override PartName="/xl/tables/[^>]*/>', b'', data)
+                zout.writestr(item, data)
+        return openpyxl.load_workbook(tmp, data_only=True, read_only=True)
+
+
+ws = open_workbook(SRC)['Sheet1']
+rows = list(ws.iter_rows(values_only=True, max_col=23))[1:]
 
 orders, cur, last_date = [], None, None
 for r in rows:

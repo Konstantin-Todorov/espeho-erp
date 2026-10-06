@@ -63,8 +63,8 @@ test('spreadsheet import: all orders, totals and clients', async () => {
             COUNT(*) FILTER (WHERE created_at > NOW())::int AS future,
             (SELECT COUNT(*)::int FROM clients WHERE name IN ('М-Ж','ОФИС','Д-КА','д-ка')) AS channel_clients
      FROM orders WHERE external_ref IS NOT NULL`);
-  assert.equal(r.orders, 3147);
-  assert.equal(r.sales, 527827);
+  assert.equal(r.orders, 6863);
+  assert.equal(r.sales, 1130487);
   assert.equal(r.future, 0);
   assert.equal(r.channel_clients, 0, 'channel words must not be clients');
 });
