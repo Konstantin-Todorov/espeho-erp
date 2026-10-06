@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
+const { stripMoney } = require('../utils/financial');
 
 const router = express.Router();
 router.use(auth);
@@ -28,13 +29,13 @@ router.get('/materials', async (req, res) => {
       FROM materials m
       LEFT JOIN stock s ON s.material_id=m.id
       LEFT JOIN locations l ON l.id=s.location_id
-      ${where}
+      ${where ? where + ' AND m.active = true' : 'WHERE m.active = true'}
       GROUP BY m.id
       ORDER BY m.category, m.name
       LIMIT $${params.length+1} OFFSET $${params.length+2}`,
-      [...params, limit, offset]
+      [...params, Math.min(500, +limit || 100), offset]
     );
-    res.json(rows);
+    res.json(req.user.role === 'production' ? stripMoney(req.user, rows, ['price_per_unit']) : rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Грешка при зареждане на материалите' });
@@ -110,7 +111,7 @@ router.get('/movements', async (req, res) => {
   if (order_id)      { params.push(order_id);       conds.push(`sm.order_id=$${params.length}`); }
   if (movement_type) { params.push(movement_type);  conds.push(`sm.movement_type=$${params.length}::movement_type`); }
   if (from)          { params.push(from);           conds.push(`sm.created_at>=$${params.length}`); }
-  if (to)            { params.push(to);             conds.push(`sm.created_at<=$${params.length}`); }
+  if (to)            { params.push(to);             conds.push(`sm.created_at<$${params.length}::date + 1`); }
 
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
   try {
@@ -125,9 +126,9 @@ router.get('/movements', async (req, res) => {
       ${where}
       ORDER BY sm.created_at DESC
       LIMIT $${params.length+1} OFFSET $${params.length+2}`,
-      [...params, limit, offset]
+      [...params, Math.min(500, +limit || 50), offset]
     );
-    res.json(rows);
+    res.json(req.user.role === 'production' ? stripMoney(req.user, rows, ['unit_price', 'total_value']) : rows);
   } catch (err) {
     res.status(500).json({ error: 'Грешка на сървъра' });
   }
@@ -177,10 +178,11 @@ router.post('/receive', roleCheck('admin','warehouse'), async (req, res) => {
 });
 
 // POST /api/warehouse/issue — issue materials to order
-router.post('/issue', roleCheck('admin','warehouse','production'), async (req, res) => {
-  const { material_id, location_id, order_id, quantity, notes } = req.body;
-  if (!material_id || !order_id || !quantity || quantity <= 0) {
-    return res.status(400).json({ error: 'Всички полета са задължителни' });
+router.post('/issue', roleCheck('admin','office','warehouse','production'), async (req, res) => {
+  const { material_id, location_id, order_id, notes } = req.body;
+  const quantity = Number(req.body.quantity);
+  if (!material_id || !location_id || !order_id || !(quantity > 0)) {
+    return res.status(400).json({ error: 'Материал, склад, поръчка и количество са задължителни' });
   }
   const dbClient = await pool.connect();
   try {
@@ -188,10 +190,10 @@ router.post('/issue', roleCheck('admin','warehouse','production'), async (req, r
 
     // Check stock
     const stockQ = await dbClient.query(
-      'SELECT quantity FROM stock WHERE material_id=$1 AND location_id=$2',
+      'SELECT quantity FROM stock WHERE material_id=$1 AND location_id=$2 FOR UPDATE',
       [material_id, location_id]
     );
-    if (!stockQ.rows[0] || stockQ.rows[0].quantity < quantity) {
+    if (!stockQ.rows[0] || Number(stockQ.rows[0].quantity) < quantity) {
       await dbClient.query('ROLLBACK');
       return res.status(400).json({ error: 'Недостатъчна наличност' });
     }
@@ -227,17 +229,32 @@ router.post('/issue', roleCheck('admin','warehouse','production'), async (req, r
     await dbClient.query('COMMIT');
     res.status(201).json(rows[0]);
   } catch (err) {
-    await dbClient.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'Грешка при изписване' });
+    await dbClient.query('ROLLBACK').catch(() => {});
+    throw err;
   } finally {
     dbClient.release();
   }
 });
 
 // POST /api/warehouse/materials — create new material
+// Sets the low-stock threshold for a material in every location it is stocked in
+// (creating a stock row in the first location if it has none yet).
+async function setMinThreshold(materialId, value) {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v < 0) return;
+  const { rowCount } = await pool.query(
+    'UPDATE stock SET min_threshold=$1, updated_at=NOW() WHERE material_id=$2', [v, materialId]);
+  if (!rowCount) {
+    await pool.query(
+      `INSERT INTO stock (material_id, location_id, quantity, min_threshold)
+       SELECT $1, id, 0, $2 FROM locations ORDER BY name LIMIT 1
+       ON CONFLICT (material_id, location_id) DO UPDATE SET min_threshold = EXCLUDED.min_threshold`,
+      [materialId, v]);
+  }
+}
+
 router.post('/materials', roleCheck('admin','warehouse'), async (req, res) => {
-  const { name, code, category, unit, price_per_unit, description } = req.body;
+  const { name, code, category, unit, price_per_unit, description, min_threshold } = req.body;
   if (!name || !unit || !category) {
     return res.status(400).json({ error: 'Назованието, единицата и категорията са задължителни' });
   }
@@ -245,8 +262,9 @@ router.post('/materials', roleCheck('admin','warehouse'), async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO materials (name, code, category, unit, price_per_unit, description)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [name, code, category, unit, price_per_unit || 0, description]
+      [name, code || null, category, unit, price_per_unit || 0, description || null]
     );
+    if (min_threshold !== undefined && min_threshold !== '') await setMinThreshold(rows[0].id, min_threshold);
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Кодът вече съществува' });
@@ -256,8 +274,9 @@ router.post('/materials', roleCheck('admin','warehouse'), async (req, res) => {
 
 // PATCH /api/warehouse/materials/:id — update material
 router.patch('/materials/:id', roleCheck('admin','warehouse'), async (req, res) => {
-  const { name, code, category, unit, price_per_unit, description, active } = req.body;
+  const { name, code, category, unit, price_per_unit, description, active, min_threshold } = req.body;
   try {
+    if (min_threshold !== undefined && min_threshold !== '') await setMinThreshold(req.params.id, min_threshold);
     const { rows } = await pool.query(
       `UPDATE materials SET name=COALESCE($1,name), code=COALESCE($2,code),
        category=COALESCE($3::material_category,category), unit=COALESCE($4,unit),

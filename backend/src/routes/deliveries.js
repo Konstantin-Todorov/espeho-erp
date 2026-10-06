@@ -8,20 +8,20 @@ const router = express.Router();
 router.use(auth);
 
 // GET /api/deliveries — list (admin/office)
-router.get('/', roleCheck('admin','office'), async (req, res) => {
+router.get('/', roleCheck('admin','office','warehouse'), async (req, res) => {
   const { status, from, to, page = 1, limit = 50 } = req.query;
   const offset = (page - 1) * limit;
   const params = [];
   const conds = [];
   if (status) { params.push(status); conds.push(`d.status=$${params.length}`); }
   if (from)   { params.push(from);   conds.push(`d.scheduled_date>=$${params.length}`); }
-  if (to)     { params.push(to);     conds.push(`d.scheduled_date<=$${params.length}`); }
+  if (to)     { params.push(to);     conds.push(`d.scheduled_date<=$${params.length}::date`); }
 
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 
   try {
     const { rows } = await pool.query(`
-      SELECT d.*, o.order_number, c.name AS client_name, c.phone AS client_phone,
+      SELECT d.*, o.order_number, o.external_ref, o.status AS order_status, c.name AS client_name, c.phone AS client_phone,
              u.name AS driver_name_db, cb.name AS created_by_name
       FROM deliveries d
       JOIN orders o ON o.id=d.order_id
@@ -31,7 +31,7 @@ router.get('/', roleCheck('admin','office'), async (req, res) => {
       ${where}
       ORDER BY d.scheduled_date ASC NULLS LAST, d.created_at DESC
       LIMIT $${params.length+1} OFFSET $${params.length+2}`,
-      [...params, limit, offset]
+      [...params, Math.min(500, +limit || 50), offset]
     );
     res.json(rows);
   } catch (err) {
@@ -55,7 +55,7 @@ router.get('/order/:orderId', async (req, res) => {
 });
 
 // POST /api/deliveries
-router.post('/', roleCheck('admin','office'), async (req, res) => {
+router.post('/', roleCheck('admin','office','warehouse'), async (req, res) => {
   const { order_id, driver_id, driver_name, scheduled_date, address, notes } = req.body;
   if (!order_id) return res.status(400).json({ error: 'Поръчката е задължителна' });
   try {
@@ -72,49 +72,57 @@ router.post('/', roleCheck('admin','office'), async (req, res) => {
   }
 });
 
-// PATCH /api/deliveries/:id
-router.patch('/:id', roleCheck('admin','office'), async (req, res) => {
-  const { status, driver_id, driver_name, scheduled_date, address, notes, recipient_name, signature_note } = req.body;
-  try {
-    const { rows } = await pool.query(
-      `UPDATE deliveries SET
-         status=COALESCE($1,status), driver_id=COALESCE($2,driver_id),
-         driver_name=COALESCE($3,driver_name), scheduled_date=COALESCE($4,scheduled_date),
-         address=COALESCE($5,address), notes=COALESCE($6,notes),
-         recipient_name=COALESCE($7,recipient_name),
-         signature_note=COALESCE($8,signature_note),
-         delivered_at=CASE WHEN $1='DELIVERED' AND delivered_at IS NULL THEN NOW() ELSE delivered_at END,
-         updated_at=NOW()
-       WHERE id=$9 RETURNING *`,
-      [status||null, driver_id||null, driver_name||null, scheduled_date||null,
-       address||null, notes||null, recipient_name||null, signature_note||null, req.params.id]
-    );
-    if (!rows[0]) return res.status(404).json({ error: 'Не е намерена' });
+// PATCH /api/deliveries/:id — only keys present in the body change.
+// Marking a delivery DELIVERED also hands the order over (ДОСТАВЕНА) if it was ready.
+const FIELDS = ['status','driver_id','driver_name','scheduled_date','address','notes','recipient_name','signature_note'];
+router.patch('/:id', roleCheck('admin','office','warehouse'), async (req, res) => {
+  const { status } = req.body;
+  if (status && !['PENDING','IN_TRANSIT','DELIVERED','FAILED'].includes(status)) {
+    return res.status(400).json({ error: 'Невалиден статус' });
+  }
+  const sets = [], params = [];
+  for (const f of FIELDS) {
+    if (!(f in req.body)) continue;
+    params.push(req.body[f] === '' ? null : req.body[f]);
+    sets.push(`${f}=$${params.length}`);
+  }
+  if (!sets.length) return res.status(400).json({ error: 'Няма промени' });
+  if (status === 'DELIVERED') sets.push('delivered_at=COALESCE(delivered_at, NOW())');
+  params.push(req.params.id);
 
-    // If delivered, notify
+  const db = await pool.connect();
+  let d, order;
+  try {
+    await db.query('BEGIN');
+    ({ rows: [d] } = await db.query(
+      `UPDATE deliveries SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${params.length} RETURNING *`, params));
+    if (!d) { await db.query('ROLLBACK'); return res.status(404).json({ error: 'Не е намерена' }); }
     if (status === 'DELIVERED') {
-      const d = rows[0];
-      const orderQ = await pool.query(
-        `SELECT o.order_number, c.name AS client_name FROM orders o JOIN clients c ON c.id=o.client_id WHERE o.id=$1`,
-        [d.order_id]
-      );
-      if (orderQ.rows[0]) {
-        await notify({
-          roles: ['admin','office'],
-          type: 'order_delivered',
-          title: `Доставена: ${orderQ.rows[0].order_number}`,
-          body: `Клиент: ${orderQ.rows[0].client_name}`,
-          link: `/orders/${d.order_id}`,
-          orderId: d.order_id,
-        });
+      ({ rows: [order] } = await db.query(
+        `UPDATE orders o SET status='ДОСТАВЕНА', delivered_at=COALESCE(o.delivered_at, NOW()), updated_by=$2, updated_at=NOW(),
+                installation_status = CASE WHEN o.fulfillment='монтаж' AND o.installation_status IS NULL THEN 'ЗА_МОНТАЖ' ELSE o.installation_status END
+         WHERE o.id=$1 AND o.status IN ('ГОТОВА','ПРОИЗВОДСТВО')
+         RETURNING o.id, o.order_number, o.external_ref, (SELECT name FROM clients WHERE id=o.client_id) AS client_name`,
+        [d.order_id, req.user.id]));
+      if (order) {
+        await db.query(`INSERT INTO order_comments (order_id, user_id, message) VALUES ($1,$2,'Статус: → ДОСТАВЕНА (доставката е отбелязана като доставена)')`,
+          [d.order_id, req.user.id]);
       }
     }
-
-    res.json(rows[0]);
+    await db.query('COMMIT');
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Грешка при обновяване' });
+    await db.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    db.release();
   }
+
+  if (order) {
+    await notify({ roles: ['admin','office'], type: 'order_delivered',
+      title: `Доставена: ${order.external_ref || '#' + order.order_number}`, body: `Клиент: ${order.client_name}`,
+      link: `/orders/${d.order_id}`, orderId: d.order_id });
+  }
+  res.json(d);
 });
 
 module.exports = router;

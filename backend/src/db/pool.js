@@ -1,4 +1,8 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// Return DATE columns as plain 'YYYY-MM-DD' strings. Converting them to JS Dates shifts them by the
+// server's timezone, which made deadlines show one day early and broke "today" comparisons.
+types.setTypeParser(1082, v => v);
 require('dotenv').config();
 
 const pool = new Pool(
@@ -8,7 +12,7 @@ const pool = new Pool(
         ssl: { rejectUnauthorized: false },
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 10000,
       }
     : {
         host: process.env.DB_HOST || 'localhost',
@@ -18,13 +22,13 @@ const pool = new Pool(
         password: process.env.DB_PASSWORD,
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 10000,
       }
 );
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  // An idle client dropping (e.g. DB restart) must not take the whole server down — pg reconnects on next query
+  console.error('Unexpected error on idle client', err.message);
 });
 
 module.exports = pool;

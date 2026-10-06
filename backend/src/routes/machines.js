@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
+const { stripMoney } = require('../utils/financial');
 
 const router = express.Router();
 router.use(auth);
@@ -17,7 +18,7 @@ router.get('/', async (req, res) => {
              THEN true ELSE false END AS service_overdue
       FROM machines m WHERE m.active=true ORDER BY m.name`
     );
-    res.json(rows);
+    res.json(stripMoney(req.user, rows, ['cost_per_hour']));
   } catch (err) {
     res.status(500).json({ error: 'Грешка на сървъра' });
   }
@@ -41,7 +42,8 @@ router.get('/:id', async (req, res) => {
        WHERE ml.machine_id=$1 ORDER BY ml.performed_at DESC LIMIT 20`,
       [req.params.id]
     );
-    res.json({ ...machineQ.rows[0], maintenance_logs: logs.rows });
+    res.json({ ...stripMoney(req.user, machineQ.rows[0], ['cost_per_hour']),
+               maintenance_logs: stripMoney(req.user, logs.rows, ['cost']) });
   } catch (err) {
     res.status(500).json({ error: 'Грешка на сървъра' });
   }
@@ -81,7 +83,7 @@ router.post('/:id/maintenance', roleCheck('admin','production'), async (req, res
 
     // Update machine last_service
     await dbClient.query(
-      `UPDATE machines SET last_service=$1 WHERE id=$2`,
+      `UPDATE machines SET last_service=GREATEST(COALESCE(last_service, $1::date), $1::date) WHERE id=$2`,
       [performed_at || new Date().toISOString().split('T')[0], req.params.id]
     );
 

@@ -2,6 +2,12 @@
 -- Generated 2026-06-16
 -- Clears demo data and imports 497 orders from 200 clients
 
+-- Fresh databases only: the import below needs an admin user as order author. On existing
+-- installations (where this migration already ran) this file is never executed again.
+INSERT INTO users (name, email, password_hash, role)
+SELECT 'Администратор', 'admin@espeho.com', '$2a$10$f0GWO270ULRJ/0Qz.1FqeehPBkitlQYKlGXfUTMKz4SkKC66O.1nO', 'admin'
+ WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin');
+
 -- Clear demo data (keep users, products, app_settings)
 DELETE FROM notifications;
 DELETE FROM defects;

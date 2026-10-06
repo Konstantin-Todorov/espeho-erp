@@ -166,56 +166,63 @@ router.patch('/purchase-orders/:id', roleCheck('admin','office','warehouse'), as
   }
 });
 
-// POST /api/suppliers/purchase-orders/:id/receive — receive goods and add to stock
-router.post('/purchase-orders/:id/receive', roleCheck('admin','warehouse'), async (req, res) => {
+// POST /api/suppliers/purchase-orders/:id/receive — receive goods into stock.
+// Body: { location_id, items: [{ poi_id, received_qty }] }. Material and price come from the PO line,
+// never from the request. Partial receipts keep the PO open (PARTIAL); fully received → RECEIVED.
+router.post('/purchase-orders/:id/receive', roleCheck('admin','office','warehouse'), async (req, res) => {
   const { location_id, items } = req.body;
-  if (!location_id) return res.status(400).json({ error: 'Локацията е задължителна' });
+  if (!location_id) return res.status(400).json({ error: 'Изберете склад/локация' });
 
   const dbClient = await pool.connect();
   try {
     await dbClient.query('BEGIN');
+    const { rows: [po] } = await dbClient.query(
+      'SELECT * FROM purchase_orders WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!po) { await dbClient.query('ROLLBACK'); return res.status(404).json({ error: 'Поръчката не е намерена' }); }
+    if (['RECEIVED', 'CANCELLED'].includes(po.status)) {
+      await dbClient.query('ROLLBACK');
+      return res.status(400).json({ error: 'Тази поръчка вече е приета или отказана' });
+    }
+    const { rows: lines } = await dbClient.query(
+      'SELECT * FROM purchase_order_items WHERE po_id=$1 FOR UPDATE', [po.id]);
+    const byId = Object.fromEntries(lines.map(l => [l.id, l]));
 
+    let received = 0;
     for (const item of items || []) {
-      if (!item.material_id || !item.received_qty || item.received_qty <= 0) continue;
-
+      const line = byId[item.poi_id];
+      const qty = Number(item.received_qty);
+      if (!line || !(qty > 0)) continue;
+      received++;
+      await dbClient.query('UPDATE purchase_order_items SET received_qty = COALESCE(received_qty,0) + $1 WHERE id=$2',
+        [qty, line.id]);
+      if (!line.material_id) continue; // free-text line (service) — nothing goes to stock
       await dbClient.query(
-        `INSERT INTO stock (material_id, location_id, quantity, min_threshold)
-         VALUES ($1,$2,$3,0)
-         ON CONFLICT (material_id,location_id) DO UPDATE
-         SET quantity=stock.quantity+EXCLUDED.quantity, updated_at=NOW()`,
-        [item.material_id, location_id, item.received_qty]
-      );
-
+        `INSERT INTO stock (material_id, location_id, quantity, min_threshold) VALUES ($1,$2,$3,0)
+         ON CONFLICT (material_id,location_id) DO UPDATE SET quantity=stock.quantity+EXCLUDED.quantity, updated_at=NOW()`,
+        [line.material_id, location_id, qty]);
       await dbClient.query(
         `INSERT INTO stock_movements (material_id, location_id, movement_type, quantity, unit_price, worker_id, notes)
          VALUES ($1,$2,'ПОЛУЧЕНО',$3,$4,$5,$6)`,
-        [item.material_id, location_id, item.received_qty, item.unit_price||0, req.user.id, `PO приемане`]
-      );
-
-      await dbClient.query(
-        `UPDATE purchase_order_items SET received_qty=received_qty+$1 WHERE id=$2`,
-        [item.received_qty, item.poi_id]
-      );
-
-      if (item.unit_price) {
-        await dbClient.query(
-          'UPDATE materials SET price_per_unit=$1, updated_at=NOW() WHERE id=$2',
-          [item.unit_price, item.material_id]
-        );
+        [line.material_id, location_id, qty, line.unit_price || 0, req.user.id, `Приемане по ${po.po_number}`]);
+      if (+line.unit_price > 0) {
+        await dbClient.query('UPDATE materials SET price_per_unit=$1, updated_at=NOW() WHERE id=$2',
+          [line.unit_price, line.material_id]);
       }
     }
+    if (!received) { await dbClient.query('ROLLBACK'); return res.status(400).json({ error: 'Въведете получено количество' }); }
 
+    const { rows: [{ open }] } = await dbClient.query(
+      `SELECT COUNT(*)::int AS open FROM purchase_order_items WHERE po_id=$1 AND COALESCE(received_qty,0) < quantity`, [po.id]);
+    const newStatus = open ? 'PARTIAL' : 'RECEIVED';
     await dbClient.query(
-      `UPDATE purchase_orders SET status='RECEIVED', received_date=NOW()::date, updated_at=NOW() WHERE id=$1`,
-      [req.params.id]
-    );
+      `UPDATE purchase_orders SET status=$1, received_date=CASE WHEN $1='RECEIVED' THEN NOW()::date ELSE received_date END,
+       updated_at=NOW() WHERE id=$2`, [newStatus, po.id]);
 
     await dbClient.query('COMMIT');
-    res.json({ ok: true });
+    res.json({ ok: true, status: newStatus });
   } catch (err) {
-    await dbClient.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'Грешка при приемане' });
+    await dbClient.query('ROLLBACK').catch(() => {});
+    throw err;
   } finally {
     dbClient.release();
   }

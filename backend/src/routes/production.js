@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
+const notify = require('../utils/notify');
 
 const router = express.Router();
 router.use(auth);
@@ -29,7 +30,8 @@ router.get('/board', async (req, res) => {
                json_build_object(
                  'id', ps.id, 'stage_name', ps.stage_name,
                  'stage_order', ps.stage_order, 'status', ps.status,
-                 'worker_name', wu.name, 'started_at', ps.started_at
+                 'worker_name', wu.name, 'started_at', ps.started_at,
+                 'assigned_to', ps.assigned_to
                ) ORDER BY ps.stage_order
              ) AS stages
       FROM orders o
@@ -51,16 +53,20 @@ router.get('/board', async (req, res) => {
 router.get('/my-work', async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT ps.id, ps.stage_name, ps.status, ps.stage_order,
-             o.id AS order_id, o.order_number, o.order_type, o.is_urgent, o.deadline,
-             c.name AS client_name
+      SELECT ps.id, ps.stage_name, ps.status, ps.stage_order, ps.assigned_to,
+             (ps.assigned_to = $1) AS mine,
+             o.id AS order_id, o.order_number, o.external_ref, o.order_type, o.is_urgent, o.deadline,
+             c.name AS client_name,
+             NOT EXISTS (SELECT 1 FROM production_stages p2 WHERE p2.order_id = ps.order_id
+                          AND p2.stage_order < ps.stage_order AND p2.status NOT IN ('ГОТОВ','ПРОПУСНАТ')) AS can_start
       FROM production_stages ps
       JOIN orders o ON o.id = ps.order_id
       JOIN clients c ON c.id = o.client_id
-      WHERE ps.assigned_to = $1
-        AND ps.status IN ('ЧАКАЩ','В_ПРОЦЕС')
+      WHERE ps.status IN ('ЧАКАЩ','В_ПРОЦЕС')
         AND o.status = 'ПРОИЗВОДСТВО'
-      ORDER BY o.is_urgent DESC, o.deadline ASC NULLS LAST`,
+        AND (ps.assigned_to = $1 OR ps.assigned_to IS NULL)
+      ORDER BY (ps.assigned_to = $1) DESC NULLS LAST, (ps.status = 'В_ПРОЦЕС') DESC,
+               o.is_urgent DESC, o.deadline ASC NULLS LAST, ps.stage_order`,
       [req.user.id]
     );
     res.json(rows);
@@ -86,79 +92,89 @@ router.get('/stages/:orderId', async (req, res) => {
   }
 });
 
-// PATCH /api/production/stages/:id — update stage status
+// PATCH /api/production/stages/:id — start / finish / skip a stage, assign worker or machine, add notes
 router.patch('/stages/:id', roleCheck('admin','office','production'), async (req, res) => {
   const { status, machine_id, notes, assigned_to } = req.body;
+  if (status && !['ЧАКАЩ','В_ПРОЦЕС','ГОТОВ','ПРОПУСНАТ'].includes(status)) {
+    return res.status(400).json({ error: 'Невалиден статус на етап' });
+  }
   const dbClient = await pool.connect();
+  let orderBecameReady = null;
   try {
     await dbClient.query('BEGIN');
+    const { rows: [stage] } = await dbClient.query(
+      `SELECT ps.*, o.status AS order_status, o.order_number, o.external_ref, c.name AS client_name
+       FROM production_stages ps JOIN orders o ON o.id = ps.order_id JOIN clients c ON c.id = o.client_id
+       WHERE ps.id=$1 FOR UPDATE OF ps`, [req.params.id]);
+    if (!stage) {
+      await dbClient.query('ROLLBACK');
+      return res.status(404).json({ error: 'Етапът не е намерен' });
+    }
 
-    const stageQ = await dbClient.query(
-      'SELECT * FROM production_stages WHERE id=$1', [req.params.id]
-    );
-    if (!stageQ.rows[0]) return res.status(404).json({ error: 'Етапът не е намерен' });
-    const stage = stageQ.rows[0];
-
-    // Check previous stage is done (unless admin)
-    if (status === 'В_ПРОЦЕС' && req.user.role !== 'admin') {
-      const prevCheck = await dbClient.query(
-        `SELECT id FROM production_stages
-         WHERE order_id=$1 AND stage_order < $2 AND status != 'ГОТОВ' AND status != 'ПРОПУСНАТ'`,
-        [stage.order_id, stage.stage_order]
-      );
-      if (prevCheck.rows.length > 0) {
+    if (status && status !== stage.status) {
+      // Stages can only be worked on while the order is in production
+      if (stage.order_status !== 'ПРОИЗВОДСТВО' && req.user.role !== 'admin') {
         await dbClient.query('ROLLBACK');
-        return res.status(400).json({ error: 'Предишният етап все още не е завършен' });
+        return res.status(400).json({ error: `Поръчката е в статус „${stage.order_status}“ — етапите се работят само когато е „ПРОИЗВОДСТВО“` });
+      }
+      if (status === 'В_ПРОЦЕС' && req.user.role !== 'admin') {
+        const { rows: prev } = await dbClient.query(
+          `SELECT id FROM production_stages
+           WHERE order_id=$1 AND stage_order < $2 AND status NOT IN ('ГОТОВ','ПРОПУСНАТ')`,
+          [stage.order_id, stage.stage_order]);
+        if (prev.length) {
+          await dbClient.query('ROLLBACK');
+          return res.status(400).json({ error: 'Предишният етап все още не е завършен' });
+        }
       }
     }
 
-    // Allow assigning worker without changing status
-    if (assigned_to !== undefined && !status) {
-      const { rows } = await dbClient.query(
-        `UPDATE production_stages SET assigned_to=$1 WHERE id=$2 RETURNING *`,
-        [assigned_to || null, req.params.id]
-      );
-      await dbClient.query('COMMIT');
-      return res.json(rows[0]);
-    }
+    // Who is assigned: explicit choice wins; a production worker who starts an unassigned stage takes it
+    let newAssignee = stage.assigned_to;
+    if (assigned_to !== undefined) newAssignee = assigned_to || null;
+    else if (status === 'В_ПРОЦЕС' && !stage.assigned_to && req.user.role === 'production') newAssignee = req.user.id;
 
-    const resolvedAssignedTo = status === 'В_ПРОЦЕС' ? req.user.id : (assigned_to ?? stage.assigned_to);
-
-    const { rows } = await dbClient.query(
+    const newStatus = status || stage.status;
+    const { rows: [updated] } = await dbClient.query(
       `UPDATE production_stages SET
-         status=$1::stage_status, machine_id=COALESCE($2,machine_id),
-         assigned_to=COALESCE($3,assigned_to),
-         started_at=CASE WHEN $4 THEN NOW() ELSE started_at END,
-         completed_at=CASE WHEN $5 THEN NOW() ELSE completed_at END,
-         notes=COALESCE($6,notes)
+         status=$1::stage_status,
+         machine_id=CASE WHEN $2::boolean THEN $3::uuid ELSE machine_id END,
+         assigned_to=$4,
+         started_at=CASE WHEN $1 = 'В_ПРОЦЕС' AND started_at IS NULL THEN NOW()
+                         WHEN $1 = 'ЧАКАЩ' THEN NULL ELSE started_at END,
+         completed_at=CASE WHEN $1 IN ('ГОТОВ','ПРОПУСНАТ') THEN COALESCE(completed_at, NOW()) ELSE NULL END,
+         notes=CASE WHEN $5::boolean THEN $6 ELSE notes END
        WHERE id=$7 RETURNING *`,
-      [status, machine_id, resolvedAssignedTo,
-       status === 'В_ПРОЦЕС' && !stage.started_at,
-       status === 'ГОТОВ',
-       notes, req.params.id]
-    );
+      [newStatus, machine_id !== undefined, machine_id || null, newAssignee,
+       notes !== undefined, notes || null, req.params.id]);
 
-    // If last stage done, check if order should move to ГОТОВА
-    if (status === 'ГОТОВ') {
-      const remaining = await dbClient.query(
-        `SELECT id FROM production_stages
-         WHERE order_id=$1 AND status NOT IN ('ГОТОВ','ПРОПУСНАТ')`,
-        [stage.order_id]
-      );
-      if (remaining.rows.length === 0) {
+    // All stages finished → order becomes ГОТОВА (only from ПРОИЗВОДСТВО)
+    if (newStatus === 'ГОТОВ' && stage.order_status === 'ПРОИЗВОДСТВО') {
+      const { rows: remaining } = await dbClient.query(
+        `SELECT id FROM production_stages WHERE order_id=$1 AND status NOT IN ('ГОТОВ','ПРОПУСНАТ')`,
+        [stage.order_id]);
+      if (!remaining.length) {
         await dbClient.query(
-          `UPDATE orders SET status='ГОТОВА', updated_at=NOW() WHERE id=$1`,
-          [stage.order_id]
-        );
+          `UPDATE orders SET status='ГОТОВА', updated_by=$2, updated_at=NOW() WHERE id=$1`,
+          [stage.order_id, req.user.id]);
+        await dbClient.query(
+          `INSERT INTO order_comments (order_id, user_id, message) VALUES ($1,$2,'Статус: ПРОИЗВОДСТВО → ГОТОВА (всички етапи завършени)')`,
+          [stage.order_id, req.user.id]);
+        orderBecameReady = stage;
       }
     }
 
     await dbClient.query('COMMIT');
-    res.json(rows[0]);
+    if (orderBecameReady) {
+      const num = orderBecameReady.external_ref || `#${orderBecameReady.order_number}`;
+      await notify({ roles: ['admin','office'], type: 'order_ready',
+        title: `Поръчка ${num} е готова`, body: `Клиент: ${orderBecameReady.client_name} — всички етапи са завършени`,
+        link: `/orders/${orderBecameReady.order_id}`, orderId: orderBecameReady.order_id });
+    }
+    res.json({ ...updated, order_ready: !!orderBecameReady });
   } catch (err) {
-    await dbClient.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'Грешка при обновяване на етап' });
+    await dbClient.query('ROLLBACK').catch(() => {});
+    throw err;
   } finally {
     dbClient.release();
   }

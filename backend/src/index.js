@@ -1,62 +1,5 @@
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-
-const app = express();
-
-// ── Middleware ──────────────────────────────────────────────
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? true : (process.env.FRONTEND_URL || 'http://localhost:5173'),
-  credentials: true,
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
-
-// Static file serving for uploads
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
-
-// ── Routes ──────────────────────────────────────────────────
-app.use('/api/auth',       require('./routes/auth'));
-app.use('/api/clients',    require('./routes/clients'));
-app.use('/api/orders',     require('./routes/orders'));
-app.use('/api/production', require('./routes/production'));
-app.use('/api/defects',    require('./routes/defects'));
-app.use('/api/warehouse',  require('./routes/warehouse'));
-app.use('/api/machines',   require('./routes/machines'));
-app.use('/api/reports',    require('./routes/reports'));
-app.use('/api/files',      require('./routes/files'));
-app.use('/api/products',   require('./routes/products'));
-app.use('/api/comments',   require('./routes/comments'));
-app.use('/api/public',         require('./routes/public'));
-app.use('/api/notifications',  require('./routes/notifications'));
-app.use('/api/quotations',     require('./routes/quotations'));
-app.use('/api/quality',        require('./routes/quality'));
-app.use('/api/deliveries',     require('./routes/deliveries'));
-app.use('/api/suppliers',      require('./routes/suppliers'));
-app.use('/api/admin',          require('./routes/admin'));
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', system: 'ЕСПЕХО ERP', version: '1.0.0' });
-});
-
-// Serve frontend in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '..', 'public')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
-  });
-}
-
-// ── Error handler ──────────────────────────────────────────
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  if (err.message?.includes('Неразрешен файлов тип')) {
-    return res.status(400).json({ error: err.message });
-  }
-  res.status(500).json({ error: 'Вътрешна грешка на сървъра' });
-});
+const app = require('./app');
 
 // ── Periodic jobs ──────────────────────────────────────────
 const notify = require('./utils/notify');
@@ -71,7 +14,7 @@ async function checkLowStock() {
       WHERE s.quantity < s.min_threshold AND s.min_threshold > 0
         AND NOT EXISTS (
           SELECT 1 FROM notifications n
-          WHERE n.type='low_stock' AND n.body LIKE '%'||m.name||'%'
+          WHERE n.type='low_stock' AND n.title = 'Ниска наличност: '||m.name
             AND n.created_at > NOW() - INTERVAL '24 hours'
         )
       LIMIT 10
@@ -106,7 +49,7 @@ async function checkLowStock() {
 async function checkOverdueOrders() {
   try {
     const { rows } = await pool.query(`
-      SELECT o.id, o.order_number, c.name AS client_name
+      SELECT o.id, o.order_number, o.deadline, c.name AS client_name
       FROM orders o JOIN clients c ON c.id=o.client_id
       WHERE o.deadline < NOW()::date
         AND o.status NOT IN ('ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА')
@@ -134,7 +77,7 @@ async function checkOverdueOrders() {
       );
       for (const o of rows) {
         for (const u of adminEmails.rows) {
-          const tpl = overdueEmail(o.order_number, o.client_name, o.deadline || 'неизвестна');
+          const tpl = overdueEmail(o.order_number, o.client_name, o.deadline ? new Date(o.deadline).toLocaleDateString('bg-BG') : 'неизвестна');
           sendEmail({ to: u.email, ...tpl });
         }
       }

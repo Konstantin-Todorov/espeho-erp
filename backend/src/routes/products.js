@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
+const { stripMoney } = require('../utils/financial');
 
 const router = express.Router();
 router.use(auth);
@@ -20,7 +21,8 @@ router.get('/', async (req, res) => {
       `SELECT * FROM product_templates ${where} ORDER BY sort_order, name`,
       params
     );
-    res.json(rows);
+    // Catalog prices are cost prices — shop floor and warehouse don't see them
+    res.json(stripMoney(req.user, rows, ['unit_price']));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Грешка при зареждане на каталога' });

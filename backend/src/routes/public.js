@@ -7,14 +7,14 @@ const router = express.Router(); // no auth
 router.get('/track/:token', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT o.order_number, o.status, o.order_type, o.deadline, o.is_urgent,
-              o.created_at, o.notes,
+      `SELECT o.order_number, o.external_ref, o.status, o.order_type, o.deadline, o.is_urgent,
+              o.created_at, o.delivered_at,
               c.name AS client_name,
-              json_agg(json_build_object(
+              COALESCE(json_agg(json_build_object(
                 'stage_name', ps.stage_name,
                 'status', ps.status,
                 'stage_order', ps.stage_order
-              ) ORDER BY ps.stage_order) AS stages
+              ) ORDER BY ps.stage_order) FILTER (WHERE ps.id IS NOT NULL), '[]') AS stages
        FROM orders o
        JOIN clients c ON c.id=o.client_id
        LEFT JOIN production_stages ps ON ps.order_id=o.id
@@ -25,7 +25,8 @@ router.get('/track/:token', async (req, res) => {
     if (!rows[0]) return res.status(404).json({ error: 'Поръчката не е намерена' });
     res.json(rows[0]);
   } catch (err) {
-    res.status(500).json({ error: 'Грешка на сървъра' });
+    if (err.code === '22P02') return res.status(404).json({ error: 'Поръчката не е намерена' });
+    throw err;
   }
 });
 
