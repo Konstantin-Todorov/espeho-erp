@@ -1,7 +1,6 @@
 import { NavLink, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
-import GlobalSearch from './GlobalSearch'
 import NotificationBell from './NotificationBell'
 import QuickCreate from './QuickCreate'
 import toast from 'react-hot-toast'
@@ -17,6 +16,7 @@ const ALL = ['admin','office','production','warehouse']
 const NAV_GROUPS = [
   { title: null, items: [
     { label: 'Начало', to: '/', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', roles: ALL },
+    { label: 'Работен ден', to: '/board', icon: 'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2', roles: ['admin'] },
     { label: 'Поръчки', to: '/orders', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', roles: ALL },
     { label: 'Календар', to: '/calendar', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', roles: ['admin','office','production'] },
   ]},
@@ -45,7 +45,7 @@ const NAV_GROUPS = [
   ]},
 ]
 
-export default function Sidebar({ mobile, onClose }) {
+export default function Sidebar({ mobile, onClose, onSearch }) {
   const { user, logout } = useAuth()
   const { isDark, toggleTheme } = useTheme()
   const navigate = useNavigate()
@@ -82,9 +82,12 @@ export default function Sidebar({ mobile, onClose }) {
 
       {/* Global Search + Bell */}
       <div className="py-3 border-b border-border px-3 flex items-center gap-2">
-        <div className="flex-1">
-          <GlobalSearch />
-        </div>
+        <button type="button" onClick={onSearch}
+          className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-bg border border-border text-muted hover:text-white hover:border-accent/50 text-sm transition-colors">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" /></svg>
+          <span className="flex-1 text-left truncate">Търси…</span>
+          <kbd className="hidden lg:block text-[10px] border border-border rounded px-1">⌘K</kbd>
+        </button>
         <NotificationBell />
       </div>
 

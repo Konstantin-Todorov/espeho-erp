@@ -1,21 +1,25 @@
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useCallback } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import LowStockAlert from './LowStockAlert'
 import NotificationBell from './NotificationBell'
 import QuickCreate from './QuickCreate'
 import Spinner from './ui/Spinner'
+import CommandPalette, { useCommandPaletteHotkey } from './CommandPalette'
 import { useAuth } from '../context/AuthContext'
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const openPalette = useCallback(() => { setMobileOpen(false); setPaletteOpen(true) }, [])
+  useCommandPaletteHotkey(openPalette)
   const { user } = useAuth()
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
       {/* Desktop sidebar */}
       <div className="hidden md:flex flex-col flex-shrink-0">
-        <Sidebar />
+        <Sidebar onSearch={openPalette} />
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -23,7 +27,7 @@ export default function Layout() {
         <div className="md:hidden fixed inset-0 z-40">
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
           <div className="relative z-50 w-72 h-full">
-            <Sidebar mobile onClose={() => setMobileOpen(false)} />
+            <Sidebar mobile onClose={() => setMobileOpen(false)} onSearch={openPalette} />
           </div>
         </div>
       )}
@@ -39,6 +43,9 @@ export default function Layout() {
           </button>
           <span className="font-bold text-white">ЕСПЕХО ERP</span>
           <div className="flex items-center gap-2">
+            <button onClick={openPalette} className="p-2 text-muted hover:text-white" aria-label="Търсене">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" /></svg>
+            </button>
             <QuickCreate compact />
             <NotificationBell />
           </div>
@@ -55,6 +62,7 @@ export default function Layout() {
           </Suspense>
         </main>
       </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   )
 }

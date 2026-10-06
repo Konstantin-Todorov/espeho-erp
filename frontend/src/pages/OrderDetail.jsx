@@ -15,6 +15,7 @@ import useSettings from '../hooks/useSettings'
 import OrderItems from '../components/order/OrderItems'
 import PaymentCard from '../components/order/PaymentCard'
 import EditOrderModal from '../components/order/EditOrderModal'
+import HandoverDialog from '../components/order/HandoverDialog'
 import {
   TYPE_LABELS, SOURCE_LABELS, FULFILLMENT_LABELS, INSTALL_LABELS, CATEGORY_LABELS, STATUS_HINTS, STATUS_ACTIONS,
   orderNo, eur, dateBg, isOverdue as isOrderOverdue,
@@ -357,6 +358,7 @@ export default function OrderDetail() {
   const settings = useSettings()
   const [editOpen, setEditOpen] = useState(false)
   const [confirmStatus, setConfirmStatus] = useState(null)
+  const [handoverOpen, setHandoverOpen] = useState(false)
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [laborOpen, setLaborOpen] = useState(false)
@@ -494,7 +496,7 @@ export default function OrderDetail() {
           <div className="flex gap-2 flex-wrap justify-end">
             {forward.map(s => (
               <button key={s} className="btn-primary" title={STATUS_HINTS[s]}
-                onClick={() => advanceStatus(s)}>
+                onClick={() => (s === 'ДОСТАВЕНА' && canSeePrices) ? setHandoverOpen(true) : advanceStatus(s)}>
                 {STATUS_ACTIONS[s] || s} →
               </button>
             ))}
@@ -970,6 +972,8 @@ export default function OrderDetail() {
         </div>
       </div>
 
+      <HandoverDialog order={order} open={handoverOpen} onClose={() => setHandoverOpen(false)}
+        onDone={() => { fetchOrder(); fetchComments() }} />
       <EditOrderModal open={editOpen} onClose={() => setEditOpen(false)} order={order} onSaved={fetchOrder} />
       <ConfirmDialog open={!!confirmStatus} onClose={() => setConfirmStatus(null)} danger={confirmStatus === 'ОТКАЗАНА'}
         title={confirmStatus === 'ОТКАЗАНА' ? 'Отказване на поръчка' : 'Смяна на статус'}

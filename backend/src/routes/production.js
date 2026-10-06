@@ -64,7 +64,11 @@ router.get('/my-work', async (req, res) => {
       JOIN clients c ON c.id = o.client_id
       WHERE ps.status IN ('ЧАКАЩ','В_ПРОЦЕС')
         AND o.status = 'ПРОИЗВОДСТВО'
-        AND (ps.assigned_to = $1 OR ps.assigned_to IS NULL)
+        AND (ps.assigned_to = $1
+             -- free stages: only the ones that can be started now (previous stages finished)
+             OR (ps.assigned_to IS NULL AND NOT EXISTS (
+                   SELECT 1 FROM production_stages p3 WHERE p3.order_id = ps.order_id
+                    AND p3.stage_order < ps.stage_order AND p3.status NOT IN ('ГОТОВ','ПРОПУСНАТ'))))
       ORDER BY (ps.assigned_to = $1) DESC NULLS LAST, (ps.status = 'В_ПРОЦЕС') DESC,
                o.is_urgent DESC, o.deadline ASC NULLS LAST, ps.stage_order`,
       [req.user.id]

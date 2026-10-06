@@ -6,6 +6,7 @@ import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 import { OrderStatusBadge } from '../components/ui/StatusBadge'
 import { orderNo, eur, eurRound, num, dateBg, isOverdue } from '../utils/labels'
+import Board from './Board'
 import { PageLoader } from '../components/ui/Spinner'
 import TooltipUI from '../components/ui/Tooltip'
 import { format, parseISO } from 'date-fns'
@@ -97,8 +98,11 @@ function AdminDashboard() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-3">
-        <h1 className="text-2xl font-bold text-white">Начало</h1>
-        <p className="text-sm text-muted">{format(new Date(), 'EEEE, d MMMM yyyy', { locale: bg })}</p>
+        <div>
+          <h1 className="text-2xl font-bold text-white">Начало</h1>
+          <p className="text-sm text-muted">{format(new Date(), 'EEEE, d MMMM yyyy', { locale: bg })}</p>
+        </div>
+        <Link to="/board" className="btn-primary">Работен ден →</Link>
       </div>
 
       {/* Row 1 — what needs attention now */}
@@ -256,8 +260,9 @@ function AdminDashboard() {
 export default function Dashboard() {
   const { user } = useAuth()
 
-  // Shop floor goes straight to its task list
+  // Each role starts where its work is: shop floor → tasks, office → the day's board
   if (user?.role === 'production') return <Navigate to="/production" replace />
+  if (user?.role === 'office') return <Board />
   if (user?.role === 'warehouse') {
     return (
       <div>

@@ -27,6 +27,7 @@ const Deliveries = lazy(() => import('./pages/Deliveries'))
 const Suppliers = lazy(() => import('./pages/Suppliers'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Board = lazy(() => import('./pages/Board'))
 
 const PageFallback = () => (
   <div className="flex items-center justify-center py-24"><Spinner size="lg" /></div>
@@ -52,6 +53,7 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
+        <Route path="board" element={<ProtectedRoute roles={['admin','office']}><Board /></ProtectedRoute>} />
         <Route path="orders" element={<Orders />} />
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="production" element={<ProtectedRoute roles={['admin','office','production']}><Production /></ProtectedRoute>} />
