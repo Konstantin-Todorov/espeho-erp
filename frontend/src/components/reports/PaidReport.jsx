@@ -17,31 +17,37 @@ export default function PaidReport({ from, to, onExport }) {
     onExport?.(r.data.rows.map(o => ({
       номер: o.external_ref || o.order_number, клиент: o.client_name, референция: o.client_ref || '',
       платена_на: o.paid_on, 'платено_€': o.paid, 'цена_без_ДДС_€': o.sale_net, 'себестойност_€': o.cost,
-      'разходи_€': o.expenses, 'печалба_€': o.profit,
+      'разходи_€': o.expenses, 'печалба_€': o.profit, 'комисионна_€': o.commission,
     })))
   }).catch(() => setData({ rows: [], totals: {} }))
   useEffect(() => { setData(null); load() }, [from, to])
 
   if (!data) return <PageLoader />
   const t = data.totals || {}
+  const cpct = +data.commission_pct || 0
   const pct = t.sale_net > 0 ? (t.profit / t.sale_net * 100).toFixed(1) : null
 
   // Update one row locally after its expenses change (no full reload)
   const setExpenses = (id, total) => setData(d => {
-    const rows = d.rows.map(r => r.id === id ? { ...r, expenses: total, profit: +r.sale_net - +r.cost - total } : r)
+    const rows = d.rows.map(r => {
+      if (r.id !== id) return r
+      const profit = +r.sale_net - +r.cost - total
+      return { ...r, expenses: total, profit, commission: profit > 0 ? Math.round(profit * (+d.commission_pct || 0)) / 100 : 0 }
+    })
     const sum = k => rows.reduce((s, r) => s + (+r[k] || 0), 0)
-    return { rows, totals: { ...d.totals, expenses: sum('expenses'), profit: sum('profit') } }
+    return { ...d, rows, totals: { ...d.totals, expenses: sum('expenses'), profit: sum('profit'), commission: sum('commission') } }
   })
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {[
           ['Платени поръчки', t.orders ?? 0, 'text-white'],
           ['Постъпило (с ДДС)', eurRound(t.paid), 'text-green-400'],
           ['Себестойност', eurRound(t.cost), 'text-white'],
           ['Допълнителни разходи', eurRound(t.expenses), 'text-white'],
           ['Печалба', `${eurRound(t.profit)}${pct ? ` · ${pct}%` : ''}`, +t.profit > 0 ? 'text-green-400' : 'text-danger'],
+          [`Комисионна ${cpct}%`, eurRound(t.commission), 'text-white'],
         ].map(([label, value, color]) => (
           <div key={label} className="card">
             <p className="text-xs text-muted uppercase tracking-wide mb-1">{label}</p>
@@ -50,7 +56,8 @@ export default function PaidReport({ from, to, onExport }) {
         ))}
       </div>
       <p className="text-xs text-muted">
-        Печалба = цена без ДДС − себестойност − допълнителни разходи. Отворете ред, за да добавите разход (транспорт, монтаж, комисионна…).
+        Печалба = цена без ДДС − себестойност − допълнителни разходи. Комисионна = {cpct}% от печалбата (колона „по 7,7%“ в таблицата; процентът е в Настройки).
+        Отворете ред, за да добавите разход (транспорт, монтаж…).
       </p>
 
       <div className="table-container">
@@ -59,11 +66,11 @@ export default function PaidReport({ from, to, onExport }) {
             <tr>
               <th /><th>Номер</th><th>Клиент</th><th>Платена</th>
               <th className="text-right">Цена без ДДС</th><th className="text-right">Себестойност</th>
-              <th className="text-right">Разходи</th><th className="text-right">Печалба</th>
+              <th className="text-right">Разходи</th><th className="text-right">Печалба</th><th className="text-right">Комисионна</th>
             </tr>
           </thead>
           <tbody>
-            {data.rows.length === 0 && <tr><td colSpan={8} className="text-center py-10 text-muted">Няма платени поръчки за периода</td></tr>}
+            {data.rows.length === 0 && <tr><td colSpan={9} className="text-center py-10 text-muted">Няма платени поръчки за периода</td></tr>}
             {data.rows.slice(0, 500).map(o => (
               <Fragment key={o.id}>
                 <tr className="cursor-pointer" onClick={() => setOpen(open === o.id ? null : o.id)}>
@@ -78,11 +85,12 @@ export default function PaidReport({ from, to, onExport }) {
                   <td className="text-right text-muted">{eur(o.cost)}</td>
                   <td className="text-right text-muted">{eur(o.expenses)}</td>
                   <td className={`text-right font-semibold ${+o.profit > 0 ? 'text-green-400' : 'text-danger'}`}>{eur(o.profit, { dash: false })}</td>
+                  <td className="text-right text-muted">{eur(o.commission)}</td>
                 </tr>
                 {open === o.id && (
                   <tr>
                     <td />
-                    <td colSpan={7} className="bg-bg/50">
+                    <td colSpan={8} className="bg-bg/50">
                       <div className="max-w-md py-1">
                         <OrderExpenses orderId={o.id} initial={o.expense_items} compact onChange={total => setExpenses(o.id, total)} />
                       </div>

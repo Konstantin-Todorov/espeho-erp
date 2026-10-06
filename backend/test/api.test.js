@@ -364,3 +364,53 @@ test('paid orders report with extra expenses (owner only)', async () => {
   const refs = await call('GET', `/clients/${ids.client}/refs`, { role: 'office' });
   assert.equal(refs.status, 200);
 });
+
+test('cost follows the spreadsheet formula; glass prices are for the owner only', async () => {
+  // Double unit typed by name (like the spreadsheet VLOOKUP): (3.26·1.067)·2 + 4.90 + 3.50 = 15.36 €/m²
+  const o = await call('POST', '/orders', { role: 'office', body: { client_id: ids.client, order_type: 'стъклопакет',
+    items: [{ product_desc: 'бяло 4мм/БЯЛО 4 ММ', width: 1000, height: 1000, qty: 2, unit_price: 30 }] } });
+  assert.equal(o.status, 201);
+  const adm = await call('GET', `/orders/${o.data.id}`);
+  const it = adm.data.items[0];
+  assert.equal(+it.cost_rate, 15.36);
+  assert.equal(+it.line_cost, 30.72);
+  assert.equal(+adm.data.costs.material_cost, 30.72);
+  const off = await call('GET', `/orders/${o.data.id}`, { role: 'office' });
+  assert.equal(off.data.items[0].cost_rate, undefined);
+
+  // Builder: triple unit with explicit waste; office response must not reveal the cost
+  const g = await call('GET', '/glass', { role: 'office' });
+  assert.equal(g.status, 200);
+  assert.equal(g.data[0].supply_price, undefined);
+  const white = g.data.find(x => x.name === 'БЯЛО 4ММ');
+  const add = await call('POST', `/orders/${o.data.id}/items`, { role: 'office', body: {
+    product_desc: 'БЯЛО 4ММ/БЯЛО 4ММ/БЯЛО 4ММ', width: 500, height: 500, qty: 1, unit_price: 50,
+    glass_spec: { kind: 'triple', layers: [white, white, white].map(w => ({ id: w.id, waste: 0 })) } } });
+  assert.equal(add.status, 201);
+  assert.equal(add.data.cost_rate, undefined);
+  assert.equal(add.data.line_cost, undefined);
+  const adm2 = await call('GET', `/orders/${o.data.id}`);
+  const tri = adm2.data.items.find(x => x.id === add.data.id);
+  assert.equal(+tri.cost_rate, 21.68);            // 3.26·3 + 4.90 + 7.00
+  assert.equal(+tri.line_cost, 8.67);             // min area 0.4 m² × 21.68
+  assert.equal(+adm2.data.costs.material_cost, 39.39);
+
+  // Changing the size re-scales the cost; a manual cost by the owner wins
+  await call('PATCH', `/orders/${o.data.id}/items/${it.id}`, { role: 'office', body: { qty: 1 } });
+  await call('PATCH', `/orders/${o.data.id}/items/${tri.id}`, { body: { cost_rate: 10 } });
+  const adm3 = await call('GET', `/orders/${o.data.id}`);
+  assert.equal(+adm3.data.costs.material_cost, 15.36 + 4);
+
+  // Owner edits a glass price; office cannot
+  assert.equal((await call('PATCH', `/glass/${white.id}`, { role: 'office', body: { igu_price: 4 } })).status, 403);
+  const up = await call('PATCH', `/glass/${white.id}`, { body: { waste_pct: 5 } });
+  assert.equal(up.status, 200);
+  assert.equal(+up.data.waste_pct, 5);
+});
+
+test('commission is a share of the profit (15.7%)', async () => {
+  const r = await call('GET', '/reports/paid');
+  assert.equal(r.data.commission_pct, 15.7);
+  const row = r.data.rows.find(x => +x.profit > 0);
+  assert.equal(row.commission, Math.round(+row.profit * 15.7) / 100);
+});

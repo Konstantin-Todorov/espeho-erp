@@ -144,7 +144,7 @@ router.get('/orders', async (req, res) => {
       AND ($3::text IS NULL OR o.status=$3::order_status)
       AND ($4::uuid IS NULL OR o.client_id=$4)
     ORDER BY o.created_at DESC
-    LIMIT 5000`,
+    LIMIT 50000`,
     [from||null, to||null, status||null, client_id||null, vat]
   );
   res.json(stripCost(req.user, rows));
@@ -335,12 +335,17 @@ router.get('/paid', roleCheck('admin'), async (req, res) => {
     WHERE o.payment_status IN ('платена', 'частично') AND o.status <> 'ОТКАЗАНА'
       AND ${range('COALESCE(p.last_paid, o.delivered_at::date, o.created_at::date)')}
     ORDER BY paid_on DESC, o.order_number DESC
-    LIMIT 3000`, [from || null, to || null, vat]);
+    LIMIT 50000`, [from || null, to || null, vat]);
+  // Commission as in the spreadsheet column „по 7,7%“: a share of the profit (only when there is a profit)
+  const { rows: [cs] } = await pool.query(`SELECT value FROM app_settings WHERE key='commission_pool_pct'`);
+  const pct = Number(cs?.value) || 0;
+  for (const r of rows) r.commission = +r.profit > 0 ? Math.round(+r.profit * pct) / 100 : 0;
   const sum = k => rows.reduce((s, r) => s + (+r[k] || 0), 0);
   res.json({
     rows,
+    commission_pct: pct,
     totals: { orders: rows.length, paid: sum('paid'), sale_net: sum('sale_net'), cost: sum('cost'),
-              expenses: sum('expenses'), profit: sum('profit') },
+              expenses: sum('expenses'), profit: sum('profit'), commission: sum('commission') },
   });
 });
 

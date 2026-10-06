@@ -12,15 +12,16 @@ const GROUPS = [
     note: 'Цените в поръчките се въвеждат С ДДС — както в таблицата. Маржът в отчетите се смята без ДДС.' },
   { title: 'Минимална площ за таксуване', keys: ['min_area_igu_m2', 'min_area_single_m2'],
     note: 'Малките стъкла се таксуват поне с тази площ. Пример: пакет 30×30 см (0,09 м²) се смята като 0,4 м².' },
-  { title: 'Комисионни', keys: ['commission_measurer_pct', 'commission_office_pct', 'commission_pool_pct'],
-    note: 'Процент от продажната цена без ДДС. Може да се променя по всяко време — важи за отчетите занапред.' },
+  { title: 'Комисионна', keys: ['commission_pool_pct'],
+    note: 'Процент от печалбата — както колона „по 7,7%“ в таблицата (от юни 2026 — 15,7%). Показва се в отчета „Платени поръчки“.' },
   { title: 'Фирмени данни', keys: ['company_name', 'company_eik', 'company_vat', 'company_address', 'company_workshop', 'company_phone', 'company_email'],
     note: 'Изписват се на доставателните бележки и работните листове.', text: true },
-  { title: 'Себестойност', keys: ['default_overhead_pct'],
-    note: 'Режийните се добавят автоматично към себестойността на всяка нова поръчка.' },
+  { title: 'Себестойност — формулата от таблицата', keys: ['igu2_consumables_m2', 'igu2_labor_m2', 'igu3_consumables_m2', 'igu3_labor_m2', 'single_labor_m2', 'default_overhead_pct'],
+    note: 'Двоен пакет = стъкло1×(1+фира) + стъкло2×(1+фира) + консумативи + труд (€/м², без ДДС). Цените на стъклата са в Каталог → Стъкла. Режийните (ако има) се добавят отгоре — в таблицата няма такива.' },
 ]
 const UNITS = { vat_pct: '%', price_markup_pct: '%', commission_measurer_pct: '%', commission_office_pct: '%',
-  commission_pool_pct: '%', default_overhead_pct: '%', min_area_igu_m2: 'м²', min_area_single_m2: 'м²' }
+  commission_pool_pct: '%', default_overhead_pct: '%', min_area_igu_m2: 'м²', min_area_single_m2: 'м²',
+  igu2_consumables_m2: '€/м²', igu2_labor_m2: '€/м²', igu3_consumables_m2: '€/м²', igu3_labor_m2: '€/м²', single_labor_m2: '€/м²' }
 
 export default function Settings() {
   const [rows, setRows] = useState(null)

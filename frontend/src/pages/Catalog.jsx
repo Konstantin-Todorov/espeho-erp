@@ -8,6 +8,7 @@ import useSettings from '../hooks/useSettings'
 import Modal from '../components/ui/Modal'
 import { PageLoader } from '../components/ui/Spinner'
 import { TYPE_LABELS, UOM_LABELS, UOM_HINTS } from '../utils/labels'
+import GlassPrices from '../components/catalog/GlassPrices'
 
 const UNIT = { m2: 'м²', lm: 'л.м.', pcs: 'бр.', fixed: 'сума' }
 const money = v => (v === null || v === undefined || v === '' ? null : Number(v))
@@ -152,6 +153,31 @@ export default function Catalog() {
     load()
   }
 
+  const tab = canSeeCost && params.get('tab') === 'glass' ? 'glass' : 'items'
+  const tabs = canSeeCost && (
+    <div className="flex gap-1 mb-5 border-b border-border">
+      {[['items', 'Артикули и продажни цени'], ['glass', 'Стъкла и себестойност']].map(([k, label]) => (
+        <button key={k} onClick={() => setParams(k === 'glass' ? { tab: 'glass' } : {}, { replace: true })}
+          className={`px-4 py-2 text-sm -mb-px border-b-2 ${tab === k ? 'border-accent text-white' : 'border-transparent text-muted hover:text-white'}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (tab === 'glass') {
+    return (
+      <div>
+        <div className="mb-4">
+          <h1 className="text-2xl font-bold text-white">Каталог и цени</h1>
+          <p className="text-sm text-muted mt-0.5">Цените на стъклата и фирата — по тях се смята себестойността на всяка нова поръчка</p>
+        </div>
+        {tabs}
+        <GlassPrices />
+      </div>
+    )
+  }
+
   if (!items) return <PageLoader />
 
   return (
@@ -172,6 +198,8 @@ export default function Catalog() {
           <button className="btn-primary" onClick={() => setModal('new')}><Plus className="w-4 h-4" /> Нов артикул</button>
         </div>
       </div>
+
+      {tabs}
 
       <div className="flex flex-wrap gap-2 mb-4 items-center">
         <div className="relative w-full sm:w-72">

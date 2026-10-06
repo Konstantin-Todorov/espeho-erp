@@ -12,6 +12,8 @@ const LIMITS = {
   vat_pct: [0, 30], min_area_igu_m2: [0, 2], min_area_single_m2: [0, 2], default_overhead_pct: [0, 100],
   commission_measurer_pct: [0, 50], commission_office_pct: [0, 50], commission_pool_pct: [0, 50],
   price_markup_pct: [0, 500],
+  igu2_consumables_m2: [0, 100], igu2_labor_m2: [0, 100], igu3_consumables_m2: [0, 100], igu3_labor_m2: [0, 100],
+  single_labor_m2: [0, 100],
 };
 
 // Free-text company details shown on printouts

@@ -27,8 +27,8 @@ function stripMoney(user, data, fields = ORDER_FIELDS) {
 // Costs, margins and wages are for the owner (admin) only — the office works with sale prices.
 const canSeeCost = user => user?.role === 'admin';
 const COST_ONLY = ['total_cost', 'material_cost', 'labor_cost', 'machine_cost', 'overhead_cost', 'overhead_pct',
-                   'line_cost', 'margin', 'margin_pct', 'cost', 'hourly_rate', 'cost_delivered', 'expenses',
-                   'total_material', 'total_labor', 'total_machine', 'total_overhead', 'total_margin', 'profit'];
+                   'line_cost', 'cost_rate', 'margin', 'margin_pct', 'cost', 'hourly_rate', 'cost_delivered', 'expenses',
+                   'total_material', 'total_labor', 'total_machine', 'total_overhead', 'total_margin', 'profit', 'commission'];
 
 function stripCost(user, data, fields = COST_ONLY) {
   if (canSeeCost(user)) return data;

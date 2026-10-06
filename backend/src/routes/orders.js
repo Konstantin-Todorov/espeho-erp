@@ -5,7 +5,8 @@ const roleCheck = require('../middleware/roleCheck');
 const notify = require('../utils/notify');
 const { sendEmail, orderReadyEmail } = require('../utils/email');
 const { canSeeMoney, stripMoney, canSeeCost, stripCost, ORDER_FIELDS, ITEM_FIELDS, COST_FIELDS, DEFECT_FIELDS, LABOR_FIELDS } = require('../utils/financial');
-const { getSettings, priceLine, sumLines, n } = require('../utils/pricing');
+const { getSettings, priceLine, sumLines, n, round } = require('../utils/pricing');
+const { resolveCost, lineCost } = require('../utils/glassCost');
 const { stageTemplate } = require('./options');
 const { audit, diff } = require('../utils/audit');
 
@@ -69,19 +70,21 @@ const send = (res, err) => {
   throw err;
 };
 
-async function insertItems(client, orderId, items, orderType, settings) {
+async function insertItems(client, orderId, items, orderType, settings, user) {
   const priced = [];
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     if (!it.product_desc?.trim()) continue;
     const productType = it.product_type || orderType;
     const p = priceLine({ ...it, product_type: productType }, settings);
+    const c = await resolveCost(client, it, settings, { allowManual: canSeeCost(user) });
     const { rows } = await client.query(
       `INSERT INTO order_items (order_id, product_type, product_desc, width, height, qty, unit_price,
-                                uom, area_m2, billed_qty, line_total, notes, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+                                uom, area_m2, billed_qty, line_total, notes, sort_order, cost_rate, glass_spec, line_cost)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [orderId, productType, it.product_desc.trim(), n(it.width), n(it.height), p.qty, n(it.unit_price),
-       p.uom, p.area_m2, p.billed_qty, p.line_total, it.notes || null, i]
+       p.uom, p.area_m2, p.billed_qty, p.line_total, it.notes || null, i,
+       c.cost_rate, c.glass_spec, lineCost(c.cost_rate, p.billed_qty)]
     );
     priced.push(rows[0]);
   }
@@ -100,11 +103,11 @@ async function createStages(client, orderId, orderType) {
   }
 }
 
-async function initCosts(client, orderId) {
+async function initCosts(client, orderId, materialCost = 0) {
   const s = await getSettings();
   await client.query(
-    `INSERT INTO order_costs (order_id, overhead_pct) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-    [orderId, n(s.default_overhead_pct) ?? 15]);
+    `INSERT INTO order_costs (order_id, material_cost, overhead_pct) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+    [orderId, materialCost || 0, n(s.default_overhead_pct) ?? 0]);
 }
 
 // Recompute the order's sale price from its items — but only if the price was not set manually,
@@ -118,6 +121,20 @@ async function syncSalePrice(client, orderId, previousItemsTotal) {
     await client.query('UPDATE orders SET sale_price=$1, updated_at=NOW() WHERE id=$2', [total, orderId]);
   }
   return total;
+}
+
+// Material cost of the order follows the sum of the line costs (spreadsheet formula) — unless the owner
+// typed a different cost by hand, i.e. it no longer equals the previous lines total.
+const sumCost = rows => round(rows.reduce((s, r) => s + (n(r.line_cost) || 0), 0), 2);
+async function syncCost(client, orderId, previousCostTotal) {
+  const { rows: items } = await client.query('SELECT line_cost FROM order_items WHERE order_id=$1', [orderId]);
+  const total = sumCost(items);
+  const { rows: [c] } = await client.query('SELECT material_cost FROM order_costs WHERE order_id=$1', [orderId]);
+  if (!c) {
+    await client.query('INSERT INTO order_costs (order_id, material_cost, overhead_pct) VALUES ($1,$2,0)', [orderId, total]);
+  } else if (n(c.material_cost) === 0 || Math.abs(n(c.material_cost) - previousCostTotal) < 0.01) {
+    await client.query('UPDATE order_costs SET material_cost=$1, updated_at=NOW() WHERE order_id=$2', [total, orderId]);
+  }
 }
 
 // ─── GET /api/orders ────────────────────────────────────────────────────────────
@@ -302,14 +319,14 @@ router.post('/', roleCheck('admin', 'office'), async (req, res) => {
        ['НОВА', 'МАТЕРИАЛИ', 'ПРОИЗВОДСТВО'].includes(initial_status) ? initial_status : 'НОВА',
        fulfillment === 'монтаж' ? 'ЗА_МОНТАЖ' : null, related_order_id || null, client_ref?.trim() || null]
     );
-    const priced = await insertItems(client, order.id, Array.isArray(items) ? items : [], order_type, settings);
+    const priced = await insertItems(client, order.id, Array.isArray(items) ? items : [], order_type, settings, req.user);
     // No manual price given → the order price is the sum of its lines
     if (n(sale_price) === null && priced.length) {
       order.sale_price = sumLines(priced);
       await client.query('UPDATE orders SET sale_price=$1 WHERE id=$2', [order.sale_price, order.id]);
     }
     await createStages(client, order.id, order_type);
-    await initCosts(client, order.id);
+    await initCosts(client, order.id, sumCost(priced));
     return order;
   });
   res.status(201).json(order);
@@ -398,10 +415,12 @@ router.post('/:id/clone', roleCheck('admin', 'office'), async (req, res) => {
       for (const it of items) {
         await client.query(
           `INSERT INTO order_items (order_id, product_type, product_desc, width, height, qty, unit_price, uom,
-                                    area_m2, billed_qty, line_total, line_cost, thickness_mm, notes, sort_order)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+                                    area_m2, billed_qty, line_total, line_cost, thickness_mm, notes, sort_order,
+                                    cost_rate, glass_spec)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
           [c.id, it.product_type, it.product_desc, it.width, it.height, it.qty, it.unit_price, it.uom,
-           it.area_m2, it.billed_qty, it.line_total, it.line_cost, it.thickness_mm, it.notes, it.sort_order]
+           it.area_m2, it.billed_qty, it.line_total, it.line_cost, it.thickness_mm, it.notes, it.sort_order,
+           it.cost_rate, it.glass_spec]
         );
       }
       if (stages.length) {
@@ -412,7 +431,7 @@ router.post('/:id/clone', roleCheck('admin', 'office'), async (req, res) => {
       } else {
         await createStages(client, c.id, s.order_type);
       }
-      await initCosts(client, c.id);
+      await initCosts(client, c.id, sumCost(items));
       return c;
     });
     res.status(201).json(clone);
@@ -473,18 +492,19 @@ router.post('/:id/items', roleCheck('admin', 'office'), async (req, res) => {
   const item = await tx(async client => {
     const { rows: [o] } = await client.query('SELECT id, order_type FROM orders WHERE id=$1 FOR UPDATE', [req.params.id]);
     if (!o) throw new HttpError(404, 'Поръчката не е намерена');
-    const { rows: before } = await client.query('SELECT line_total FROM order_items WHERE order_id=$1', [o.id]);
+    const { rows: before } = await client.query('SELECT line_total, line_cost FROM order_items WHERE order_id=$1', [o.id]);
     const { rows: [{ max }] } = await client.query(
       'SELECT COALESCE(MAX(sort_order), -1) AS max FROM order_items WHERE order_id=$1', [o.id]);
-    const [it] = await insertItems(client, o.id, [req.body], o.order_type, settings);
+    const [it] = await insertItems(client, o.id, [req.body], o.order_type, settings, req.user);
     await client.query('UPDATE order_items SET sort_order=$1 WHERE id=$2', [max + 1, it.id]);
     await syncSalePrice(client, o.id, sumLines(before));
+    await syncCost(client, o.id, sumCost(before));
     return it;
   }).catch(err => send(res, err));
   if (item) {
     await audit({ user: req.user, action: 'item_add', table: 'orders', id: req.params.id,
       after: { desc: item.product_desc, size: [item.width, item.height], qty: item.qty, line_total: item.line_total } });
-    res.status(201).json(item);
+    res.status(201).json(stripCost(req.user, item));
   }
 });
 
@@ -494,18 +514,30 @@ router.patch('/:id/items/:itemId', roleCheck('admin', 'office'), async (req, res
     const { rows: [cur] } = await client.query(
       'SELECT * FROM order_items WHERE id=$1 AND order_id=$2', [req.params.itemId, req.params.id]);
     if (!cur) throw new HttpError(404, 'Артикулът не е намерен');
-    const { rows: before } = await client.query('SELECT line_total FROM order_items WHERE order_id=$1', [req.params.id]);
+    const { rows: before } = await client.query('SELECT line_total, line_cost FROM order_items WHERE order_id=$1', [req.params.id]);
     const next = { ...cur };
     for (const k of ITEM_KEYS) if (k in req.body) next[k] = req.body[k];
     if (!String(next.product_desc || '').trim()) throw new HttpError(400, 'Описанието е задължително');
     const p = priceLine(next, settings);
+    // Re-price the cost only when what is being made changed (or the owner typed a cost) —
+    // a later change of glass prices must not rewrite old orders.
+    const manual = canSeeCost(req.user) && 'cost_rate' in req.body;
+    const whatChanged = 'glass_spec' in req.body || String(next.product_desc).trim() !== cur.product_desc || cur.cost_rate === null;
+    let costRate = n(cur.cost_rate), spec = cur.glass_spec;
+    if (manual || whatChanged) {
+      const c = await resolveCost(client, { ...next, glass_spec: 'glass_spec' in req.body ? req.body.glass_spec : null,
+        cost_rate: manual ? req.body.cost_rate : undefined }, settings, { allowManual: manual });
+      costRate = c.cost_rate; spec = c.glass_spec;
+    }
     const { rows: [it] } = await client.query(
       `UPDATE order_items SET product_type=$1, product_desc=$2, width=$3, height=$4, qty=$5, unit_price=$6,
-         uom=$7, area_m2=$8, billed_qty=$9, line_total=$10, notes=$11
-       WHERE id=$12 RETURNING *`,
+         uom=$7, area_m2=$8, billed_qty=$9, line_total=$10, notes=$11, cost_rate=$12, glass_spec=$13, line_cost=$14
+       WHERE id=$15 RETURNING *`,
       [next.product_type, String(next.product_desc).trim(), n(next.width), n(next.height), p.qty,
-       n(next.unit_price), p.uom, p.area_m2, p.billed_qty, p.line_total, next.notes || null, cur.id]);
+       n(next.unit_price), p.uom, p.area_m2, p.billed_qty, p.line_total, next.notes || null,
+       costRate, spec, costRate === null ? (cur.cost_rate === null ? cur.line_cost : null) : lineCost(costRate, p.billed_qty), cur.id]);
     await syncSalePrice(client, req.params.id, sumLines(before));
+    await syncCost(client, req.params.id, sumCost(before));
     const changes = diff(cur, it, ['product_desc', 'width', 'height', 'qty', 'unit_price', 'uom', 'line_total']);
     if (Object.keys(changes).length) {
       await audit({ db: client, user: req.user, action: 'item_edit', table: 'orders', id: req.params.id,
@@ -513,18 +545,19 @@ router.patch('/:id/items/:itemId', roleCheck('admin', 'office'), async (req, res
     }
     return it;
   }).catch(err => send(res, err));
-  if (item) res.json(item);
+  if (item) res.json(stripCost(req.user, item));
 });
 
 router.delete('/:id/items/:itemId', roleCheck('admin', 'office'), async (req, res) => {
   const ok = await tx(async client => {
-    const { rows: before } = await client.query('SELECT line_total FROM order_items WHERE order_id=$1', [req.params.id]);
+    const { rows: before } = await client.query('SELECT line_total, line_cost FROM order_items WHERE order_id=$1', [req.params.id]);
     const { rows: gone } = await client.query(
       'DELETE FROM order_items WHERE id=$1 AND order_id=$2 RETURNING product_desc, line_total', [req.params.itemId, req.params.id]);
     if (!gone.length) throw new HttpError(404, 'Артикулът не е намерен');
     await audit({ db: client, user: req.user, action: 'item_delete', table: 'orders', id: req.params.id,
       before: { desc: gone[0].product_desc, line_total: gone[0].line_total } });
     await syncSalePrice(client, req.params.id, sumLines(before));
+    await syncCost(client, req.params.id, sumCost(before));
     return true;
   }).catch(err => send(res, err));
   if (ok) res.json({ ok: true });

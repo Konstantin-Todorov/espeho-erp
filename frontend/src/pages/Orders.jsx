@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { AlertTriangle, ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
+import { AlertTriangle, BookOpen, ChevronDown, ChevronRight, Layers, Plus, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
@@ -9,6 +9,7 @@ import Modal from '../components/ui/Modal'
 import ClientPicker from '../components/ui/ClientPicker'
 import OptionSelect from '../components/ui/OptionSelect'
 import OrderPicker from '../components/ui/OrderPicker'
+import GlassBuilder, { LineCostHint } from '../components/order/GlassBuilder'
 import { FavMark } from '../components/ui/FavoriteStar'
 import useSettings from '../hooks/useSettings'
 import { priceLine, sumLines } from '../utils/pricing'
@@ -123,6 +124,7 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
   const [form, setForm] = useState(empty)
   const [loading, setLoading] = useState(false)
   const [catalogIdx, setCatalogIdx] = useState(null)
+  const [builderIdx, setBuilderIdx] = useState(null)
   const [more, setMore] = useState(false)
   const [clientRefs, setClientRefs] = useState([])
 
@@ -142,17 +144,24 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
     const last = f.items[f.items.length - 1]
     // A new line repeats the previous product — dealer orders are many sizes of the same glass
     return { ...f, items: [...f.items, { ...emptyLine(last?.product_type || f.order_type),
-      product_desc: last?.product_desc || '', uom: last?.uom || 'm2', unit_price: last?.unit_price || '' }] }
+      product_desc: last?.product_desc || '', uom: last?.uom || 'm2', unit_price: last?.unit_price || '',
+      glass_spec: last?.glass_spec || null }] }
   })
   const removeItem = i => setForm(f => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }))
 
   const applyTemplate = (i, tpl, suggested) => {
-    setItem(i, { product_desc: tpl.name, product_type: tpl.order_type === 'друго' ? form.items[i].product_type : tpl.order_type,
+    setItem(i, { glass_spec: null, product_desc: tpl.name, product_type: tpl.order_type === 'друго' ? form.items[i].product_type : tpl.order_type,
       uom: tpl.uom || 'm2',
       width: tpl.default_width || form.items[i].width, height: tpl.default_height || form.items[i].height,
       unit_price: suggested ? suggested.toFixed(2) : form.items[i].unit_price })
     // The order type follows the lines unless they are mixed
     const types = new Set(form.items.map((it, idx) => idx === i ? tpl.order_type : it.product_type).filter(t => t && t !== 'друго'))
+    if (types.size) set({ order_type: types.size > 1 ? 'смесена' : [...types][0] })
+  }
+
+  const applyBuilt = (i, patch) => {
+    setItem(i, patch)
+    const types = new Set(form.items.map((it, idx) => idx === i ? patch.product_type : it.product_type).filter(t => t && t !== 'друго'))
     if (types.size) set({ order_type: types.size > 1 ? 'смесена' : [...types][0] })
   }
 
@@ -225,10 +234,19 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
                       <div className="col-span-6 md:col-span-5 relative">
                         <div className="flex gap-1">
                           <input className="input text-sm flex-1" placeholder="Стъкло / услуга, напр. БЯЛО 4ММ/БЯЛО 4ММ"
-                            value={item.product_desc} onChange={e => setItem(i, { product_desc: e.target.value })} />
-                          <button type="button" className="btn-secondary px-2 text-xs flex-shrink-0" title="Избери от каталога"
-                            onClick={() => setCatalogIdx(catalogIdx === i ? null : i)}>Каталог</button>
+                            value={item.product_desc} onChange={e => setItem(i, { product_desc: e.target.value, glass_spec: null })} />
+                          <button type="button" className="btn-secondary px-2 flex-shrink-0" title="Състав: стъкло 1 / стъкло 2 / стъкло 3 и фира"
+                            aria-label="Състав" onClick={() => { setCatalogIdx(null); setBuilderIdx(builderIdx === i ? null : i) }}>
+                            <Layers className="w-4 h-4" />
+                          </button>
+                          <button type="button" className="btn-secondary px-2 flex-shrink-0" title="Избери от каталога (услуги, обработки)"
+                            aria-label="Каталог" onClick={() => { setBuilderIdx(null); setCatalogIdx(catalogIdx === i ? null : i) }}>
+                            <BookOpen className="w-4 h-4" />
+                          </button>
                         </div>
+                        {builderIdx === i && (
+                          <GlassBuilder item={item} onClose={() => setBuilderIdx(null)} onApply={patch => applyBuilt(i, patch)} />
+                        )}
                         {catalogIdx === i && (
                           <CatalogPicker onSelect={(t, sug) => applyTemplate(i, t, sug)} onClose={() => setCatalogIdx(null)}
                             markupPct={settings.price_markup_pct} vatPct={settings.vat_pct} />
@@ -262,8 +280,11 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 mt-1.5 pl-7 pr-9">
-                    <PriceHint desc={item.product_desc} uom={item.uom} clientId={form.client?.id}
-                      onUse={v => setItem(i, { unit_price: (+v).toFixed(2) })} />
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                      <PriceHint desc={item.product_desc} uom={item.uom} clientId={form.client?.id}
+                        onUse={v => setItem(i, { unit_price: (+v).toFixed(2) })} />
+                      <LineCostHint item={item} />
+                    </div>
                     <p className="text-xs text-muted ml-auto">
                       {item.uom === 'm2' && p.area !== null && (
                         <>{num(p.area, 3)} м²{p.minApplied && <span className="text-warning" title="Под минималната площ — таксува се минимумът"> (мин.)</span>}

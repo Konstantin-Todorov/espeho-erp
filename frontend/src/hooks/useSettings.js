@@ -9,7 +9,8 @@ export default function useSettings() {
   const { isOffice } = useAuth()
   const [settings, setSettings] = useState(cached || {})
   useEffect(() => {
-    if (!isOffice || cached) return
+    if (cached) { setSettings(cached); return }
+    if (!isOffice) return
     api.get('/settings').then(r => {
       cached = Object.fromEntries(r.data.map(s => [s.key, s.value]))
       setSettings(cached)
