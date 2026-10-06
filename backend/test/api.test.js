@@ -300,3 +300,29 @@ test('client merge remembers the old name; registry lookup validates ЕИК; dem
   const m = await call('GET', '/machines');
   assert.equal(m.data.length, 0);
 });
+
+test('МП / АЛДИС / ДН СТИЛ are one client each, numbers kept as client reference', async () => {
+  const { rows: [r] } = await pool.query(
+    `SELECT (SELECT COUNT(*)::int FROM clients WHERE name ~ '^(МП|АЛДИС)[ -]*[0-9]') AS split_left,
+            (SELECT COUNT(*)::int FROM orders o JOIN clients c ON c.id=o.client_id WHERE c.name='МП' AND o.client_ref IS NOT NULL) AS mp_refs`);
+  assert.equal(r.split_left, 0);
+  assert.ok(r.mp_refs > 500);
+  const s = await call('GET', '/orders?tab=all&search=26-3200-0476&limit=5', { role: 'office' });
+  assert.ok(s.data.data.some(o => o.client_ref === '26-3200-0476' && o.client_name === 'МП'));
+});
+
+test('register proposals: accept fills ЕИК and only empty fields', async () => {
+  const c = await call('POST', '/clients', { role: 'office', body: { name: 'Предложение Тест', phone: '0888 111 222' } });
+  await pool.query(
+    `INSERT INTO client_registry_suggestions (client_id, confidence, reason, candidate) VALUES ($1,'high','тест',$2)`,
+    [c.data.id, JSON.stringify({ eik: '123456789', full_name: '"ПРЕДЛОЖЕНИЕ ТЕСТ" ЕООД', manager: 'ИВАН ИВАНОВ', phone: '02 000 000', vat_number: 'BG123456789' })]);
+  const list = await call('GET', '/clients/registry-suggestions', { role: 'office' });
+  const s = list.data.find(x => x.client_id === c.data.id);
+  assert.ok(s);
+  assert.equal((await call('POST', `/clients/registry-suggestions/${s.id}/accept`, { role: 'office', body: {} })).status, 200);
+  const d = await call('GET', `/clients/${c.data.id}`, { role: 'office' });
+  assert.equal(d.data.eik, '123456789');
+  assert.equal(d.data.mol, 'ИВАН ИВАНОВ');
+  assert.equal(d.data.phone, '0888 111 222', 'existing phone is not overwritten');
+  assert.ok(d.data.registry_checked_at);
+});

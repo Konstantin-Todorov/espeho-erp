@@ -127,7 +127,7 @@ router.get('/orders', async (req, res) => {
   const { from, to, status, client_id } = req.query;
   const vat = await vatDivisor();
   const { rows } = await pool.query(`
-    SELECT o.id, o.order_number, o.external_ref, o.status, o.order_type, o.order_category, o.payment_status,
+    SELECT o.id, o.order_number, o.external_ref, o.client_ref, o.status, o.order_type, o.order_category, o.payment_status,
            o.deadline, o.created_at, o.delivered_at, o.sale_price,
            ROUND(o.sale_price / $5, 2) AS sale_price_net, oc.total_cost,
            CASE WHEN o.sale_price > 0 AND oc.total_cost > 0

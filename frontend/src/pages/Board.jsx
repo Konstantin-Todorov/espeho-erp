@@ -51,7 +51,7 @@ function Card({ o, col, onAction, canSeePrices, busy, draggable }) {
           <p className="font-bold text-accent text-sm leading-tight">
             {orderNo(o)} {o.is_urgent && <span className="inline-block w-2 h-2 rounded-full bg-danger align-middle" title="Спешна" />}
           </p>
-          <p className="text-sm text-white truncate">{o.client_name}</p>
+          <p className="text-sm text-white truncate">{o.client_name}{o.client_ref && <span className="text-xs text-purple-300"> · {o.client_ref}</span>}</p>
         </div>
         <DeadlineChip deadline={o.deadline} done={col.key === 'debt'} />
       </div>

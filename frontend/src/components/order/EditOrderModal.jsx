@@ -24,6 +24,7 @@ export default function EditOrderModal({ open, onClose, order, onSaved }) {
       installation_status: order.installation_status || '', order_type: order.order_type,
       order_category: order.order_category, source: order.source || 'office', external_ref: order.external_ref || '',
       sale_price: order.sale_price ?? '',
+      client_ref: order.client_ref || '',
       related_order: order.related_original || null,
     })
   }, [open, order?.id])
@@ -65,6 +66,10 @@ export default function EditOrderModal({ open, onClose, order, onSaved }) {
           <label>
             <span className="label">Номер от кочана / офиса</span>
             <input className="input" value={f.external_ref} onChange={e => set({ external_ref: e.target.value })} />
+          </label>
+          <label>
+            <span className="label">Референция на клиента</span>
+            <input className="input" value={f.client_ref} placeholder="негов номер, обект, етап…" onChange={e => set({ client_ref: e.target.value })} />
           </label>
           <label>
             <span className="label">Как се предава</span>

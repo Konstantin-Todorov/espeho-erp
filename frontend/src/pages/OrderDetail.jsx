@@ -525,6 +525,7 @@ export default function OrderDetail() {
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold text-white">Поръчка {orderNo(order)}</h1>
             {order.external_ref && <span className="text-sm text-muted">#{order.order_number}</span>}
+            {order.client_ref && <span className="badge bg-purple-500/15 text-purple-300" title="Номер / референция на клиента">реф. {order.client_ref}</span>}
             <span title={STATUS_HINTS[order.status]}><OrderStatusBadge status={order.status} /></span>
             <CategoryBadge category={order.order_category} />
             {order.is_urgent && <UrgentBadge />}

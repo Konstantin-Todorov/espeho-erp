@@ -194,6 +194,7 @@ export function printDeliveryNote(order, settings = {}) {
     <div class="logo">${esc(settings.company_name || 'ЕСПЕХО ООД')}</div>
     <div style="color:#666;font-size:11px;margin-top:2px;">Доставателна бележка</div>
     <div style="color:#333;font-size:13px;font-weight:bold;margin-top:6px;">№ ${no}</div>
+    ${order.client_ref ? `<div style="color:#333;font-size:12px;margin-top:2px;">Ваш номер: ${esc(order.client_ref)}</div>` : ''}
   </div>
   <div style="text-align:right;font-size:11px;color:#555;">
     <div>Дата: <strong>${fmt(new Date())}</strong></div>

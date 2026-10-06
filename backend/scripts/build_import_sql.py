@@ -53,8 +53,25 @@ def parse_date(x):
         return None
 
 
+# One client with its own reference numbers written next to the name (same rules as migration 016)
+REF_RULES = [
+    (re.compile(r'^МП[\s-]*(\d.*)$'), 'МП'),
+    (re.compile(r'^АЛДИС[\s-]+(\S.*)$'), 'АЛДИС'),
+    (re.compile(r'^(?:ДН|Д\.Н\.)\s*СТИЛ[\s-]*(.*)$'), 'ДН СТИЛ'),
+    (re.compile(r'^(?:КЪМ\s+)?(?:ОБЕКТ\s+)?(?:СЛАТИНА|СЛ\.)\s*(?:БЛ\.246)?[\s-]*(.*)$'), 'ОБЕКТ СЛАТИНА БЛ.246'),
+]
+
+
+def split_ref(name):
+    for rx, target in REF_RULES:
+        m = rx.match(name)
+        if m and (target != 'ОБЕКТ СЛАТИНА БЛ.246' or 'СЛАТИНА' in name or name.startswith('СЛ.БЛ.246')):
+            return target, (m.group(1).strip(' -') or None)
+    return name, None
+
+
 def norm_client(raw):
-    """Returns (client_name, fulfillment, urgent)."""
+    """Returns (client_name, fulfillment, urgent, client_ref)."""
     s = re.sub(r'\s+', ' ', str(raw or '').strip().upper())
     urgent = False
     if s.startswith('СПЕШЕН') or s.startswith('СПЕШНО'):
@@ -65,8 +82,9 @@ def norm_client(raw):
         fulfillment = 'монтаж' if m.group(1) in ('М-Ж', 'МЖ') else 'доставка'
         s = m.group(2).strip()
     if s in CHANNEL_ONLY:
-        s = WALKIN
-    return s[:200], fulfillment, urgent
+        return WALKIN, fulfillment, urgent, None
+    s, ref = split_ref(s)
+    return s[:200], fulfillment, urgent, (ref[:80] if ref else None)
 
 
 def item_type(t):
@@ -109,8 +127,8 @@ for r in rows:
         dl = parse_date(r[2])
         if dl and not (d <= dl <= d + datetime.timedelta(days=120)):
             dl = None
-        client, fulfillment, urgent = norm_client(r[3])
-        cur = dict(ref=ref[:50], date=d, deadline=dl, client=client, fulfillment=fulfillment,
+        client, fulfillment, urgent, client_ref = norm_client(r[3])
+        cur = dict(ref=ref[:50], date=d, deadline=dl, client=client, fulfillment=fulfillment, client_ref=client_ref,
                    urgent=urgent, inferred=inferred, raw_office=str(r[3] or '').strip(), lines=[],
                    last_type=None, last_desc=None)
         orders.append(cur)
@@ -164,7 +182,7 @@ for i, o in enumerate(orders):
     if o['inferred']:
         extra.append('датата е приблизителна (липсва/грешна в таблицата)')
     notes = '; '.join(filter(None, [notes_txt, *extra])) or None
-    out.append(dict(seq=i, **{k: o[k] for k in ('ref', 'date', 'deadline', 'client', 'fulfillment', 'urgent')},
+    out.append(dict(seq=i, **{k: o[k] for k in ('ref', 'date', 'deadline', 'client', 'fulfillment', 'urgent', 'client_ref')},
                     otype=otype, sale=sale, cost=cost, notes=notes,
                     category='гаранция' if claim else 'нормална', lines=lines))
 
@@ -174,15 +192,15 @@ sql = [f"""-- 012: complete import of the office spreadsheet (ПОРЪЧКИ 202
 
 CREATE TEMP TABLE _imp_o (seq INT PRIMARY KEY, ref TEXT, d DATE, deadline DATE, client TEXT, fulfillment TEXT,
   urgent BOOLEAN, otype TEXT, sale NUMERIC, cost NUMERIC, notes TEXT, category TEXT, order_id UUID,
-  client_id UUID, protected BOOLEAN NOT NULL DEFAULT false) ON COMMIT DROP;
+  client_id UUID, protected BOOLEAN NOT NULL DEFAULT false, client_ref TEXT) ON COMMIT DROP;
 CREATE TEMP TABLE _imp_i (seq INT, sort INT, ptype TEXT, descr TEXT, note TEXT, thickness NUMERIC, w NUMERIC,
   h NUMERIC, qty NUMERIC, area NUMERIC, uom TEXT, billed NUMERIC, price NUMERIC, total NUMERIC, cost NUMERIC) ON COMMIT DROP;
 """]
 for chunk in range(0, len(out), 400):
     vals = [f"({q(o['seq'])},{q(o['ref'])},{q(o['date'])},{q(o['deadline'])},{q(o['client'])},{q(o['fulfillment'])},"
-            f"{q(o['urgent'])},{q(o['otype'])},{q(o['sale'])},{q(o['cost'])},{q(o['notes'])},{q(o['category'])})"
+            f"{q(o['urgent'])},{q(o['otype'])},{q(o['sale'])},{q(o['cost'])},{q(o['notes'])},{q(o['category'])},{q(o['client_ref'])})"
             for o in out[chunk:chunk + 400]]
-    sql.append("INSERT INTO _imp_o (seq,ref,d,deadline,client,fulfillment,urgent,otype,sale,cost,notes,category) VALUES\n"
+    sql.append("INSERT INTO _imp_o (seq,ref,d,deadline,client,fulfillment,urgent,otype,sale,cost,notes,category,client_ref) VALUES\n"
                + ",\n".join(vals) + ";")
 items = [(o['seq'], j, l) for o in out for j, l in enumerate(o['lines'])]
 for chunk in range(0, len(items), 500):
@@ -237,7 +255,7 @@ UPDATE _imp_o i SET protected = true
 -- 4. Correct the matched orders in place (keep their id / internal number / comments / files)
 UPDATE orders o SET
   client_id = i.client_id,
-  order_type = i.otype, order_category = i.category, sale_price = i.sale, notes = i.notes,
+  order_type = i.otype, order_category = i.category, sale_price = i.sale, notes = i.notes, client_ref = i.client_ref,
   deadline = i.deadline, is_urgent = i.urgent, fulfillment = i.fulfillment,
   installation_status = CASE WHEN i.fulfillment = 'монтаж' THEN 'МОНТИРАНА' END,
   created_at = i.d + TIME '10:00', delivered_at = COALESCE(i.deadline, i.d) + TIME '17:00'
@@ -249,13 +267,13 @@ DELETE FROM order_items WHERE order_id IN (SELECT order_id FROM _imp_o WHERE ord
 WITH ins AS (
   INSERT INTO orders (client_id, order_type, order_category, status, sale_price, notes, source, created_by,
                       deadline, is_urgent, fulfillment, installation_status, payment_status, external_ref,
-                      created_at, updated_at, delivered_at)
+                      created_at, updated_at, delivered_at, client_ref)
   SELECT i.client_id,
          i.otype, i.category, 'ДОСТАВЕНА', i.sale, i.notes, 'office',
          (SELECT id FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1),
          i.deadline, i.urgent, i.fulfillment, CASE WHEN i.fulfillment = 'монтаж' THEN 'МОНТИРАНА' END,
          'платена', i.ref || '#' || i.seq, i.d + TIME '10:00', i.d + TIME '10:00',
-         COALESCE(i.deadline, i.d) + TIME '17:00'
+         COALESCE(i.deadline, i.d) + TIME '17:00', i.client_ref
     FROM _imp_o i WHERE i.order_id IS NULL ORDER BY i.d, i.seq
   RETURNING id, external_ref)
 UPDATE _imp_o i SET order_id = ins.id FROM ins WHERE ins.external_ref = i.ref || '#' || i.seq;

@@ -298,7 +298,7 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
         {/* More options — rarely needed */}
         <section>
           <button type="button" className="text-sm text-accent hover:underline" onClick={() => setMore(m => !m)}>
-            {more ? <ChevronDown className="w-4 h-4 inline align-[-3px]" /> : <ChevronRight className="w-4 h-4 inline align-[-3px]" />} Още настройки (вид, категория, канал, номер от кочана, ръчна цена)
+            {more ? <ChevronDown className="w-4 h-4 inline align-[-3px]" /> : <ChevronRight className="w-4 h-4 inline align-[-3px]" />} Още настройки (вид, категория, канал, номера и референции, ръчна цена)
           </button>
           {more && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 p-4 rounded-xl border border-border">
@@ -332,6 +332,12 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
                 <label className="label" htmlFor="o-ref">Номер от кочана / офиса</label>
                 <input id="o-ref" className="input" placeholder="напр. 326-00512" value={form.external_ref}
                   onChange={e => set({ external_ref: e.target.value })} />
+              </div>
+              <div>
+                <label className="label" htmlFor="o-cref">Референция на клиента</label>
+                <input id="o-cref" className="input" placeholder="негов номер на поръчка, обект, етап…" value={form.client_ref || ''}
+                  onChange={e => set({ client_ref: e.target.value })} />
+                <p className="text-xs text-muted mt-1">Напр. МП 26-3200-0476, АЛДИС 8676, „етап 2“. Търси се по него.</p>
               </div>
               <div className="md:col-span-2">
                 <label className="label" htmlFor="o-price">Ръчна крайна цена (с ДДС)</label>
@@ -460,7 +466,7 @@ export default function Orders() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">
-        <input className="input w-full sm:w-72" placeholder="Търси: номер (326-00160), клиент, телефон…" value={search}
+        <input className="input w-full sm:w-72" placeholder="Търси: номер, клиент, телефон, референция…" value={search}
           onChange={e => setSearch(e.target.value)} />
         <select className="select w-auto" value={status} onChange={e => update({ status: e.target.value })}>
           <option value="">Всички статуси</option>
@@ -496,6 +502,7 @@ export default function Orders() {
                     <td className="whitespace-nowrap">
                       <span className="font-bold text-accent">{orderNo(o)}</span>
                       {o.is_urgent && <span className="ml-1.5 inline-block w-2 h-2 rounded-full bg-danger align-middle" title="Спешна" />}
+                      {o.client_ref && <div className="text-[11px] text-purple-300" title="Номер / референция на клиента">реф. {o.client_ref}</div>}
                       {o.external_ref && <div className="text-[11px] text-muted">#{o.order_number}</div>}
                       {o.open_defects > 0 && <span className="badge bg-red-500/20 text-red-400 text-[10px]">{o.open_defects} брак</span>}
                     </td>

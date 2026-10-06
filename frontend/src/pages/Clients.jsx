@@ -7,6 +7,7 @@ import Modal from '../components/ui/Modal'
 import toast from 'react-hot-toast'
 import { dateBg, num } from '../utils/labels'
 import RegistryLookup from '../components/RegistryLookup'
+import RegistrySuggestions from '../components/RegistrySuggestions'
 import OptionSelect from '../components/ui/OptionSelect'
 import { Building2 } from 'lucide-react'
 
@@ -21,6 +22,10 @@ export default function Clients() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('orders')
   const [missing, setMissing] = useState('')
+  const [view, setView] = useState('list') // list | suggestions
+  const [pendingCount, setPendingCount] = useState(0)
+  const loadPending = () => isOffice && api.get('/clients/registry-suggestions').then(r => setPendingCount(r.data.length)).catch(() => {})
+  useEffect(() => { loadPending() }, [])
   const [page, setPage] = useState(1)
   const { isOffice } = useAuth()
   const navigate = useNavigate()
@@ -61,6 +66,15 @@ export default function Clients() {
         )}
       </div>
 
+      {pendingCount > 0 && (
+        <div className="flex gap-1 mb-4">
+          {[['list', 'Всички клиенти'], ['suggestions', `Предложения от Търговския регистър (${pendingCount})`]].map(([k, l]) => (
+            <button key={k} onClick={() => setView(k)}
+              className={`px-3 py-1.5 rounded-lg text-sm ${view === k ? 'bg-accent text-white' : 'text-muted hover:text-white hover:bg-border'}`}>{l}</button>
+          ))}
+        </div>
+      )}
+      {view === 'suggestions' ? <RegistrySuggestions onChanged={() => { loadPending(); fetchClients() }} /> : <>
       <div className="mb-4 flex flex-wrap gap-2">
         <input className="input w-full sm:w-72" placeholder="Търси по име, телефон, ЕИК, град…"
           value={search} onChange={e => setSearch(e.target.value)} />
@@ -110,6 +124,8 @@ export default function Clients() {
           <button className="btn-secondary" disabled={page>=pages} onClick={() => setPage(p=>p+1)}>Напред →</button>
         </div>
       )}
+
+      </>}
 
       <CreateClientModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={c => navigate(`/clients/${c.id}`)} />
     </div>

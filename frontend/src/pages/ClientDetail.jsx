@@ -330,6 +330,7 @@ export default function ClientDetail() {
                       onClick={() => navigate(`/orders/${o.id}`)}>
                       <td>
                         <span className="font-bold text-accent">{orderNo(o)}</span>
+                        {o.client_ref && <span className="block text-[11px] text-purple-300">реф. {o.client_ref}</span>}
                         {o.is_urgent && <span className="ml-1 inline-block w-2 h-2 rounded-full bg-danger align-middle" title="Спешна" />}
                       </td>
                       <td>

@@ -76,6 +76,64 @@ router.get('/lookup/:eik', roleCheck('admin', 'office'), async (req, res) => {
   }
 });
 
+// ─── Register match proposals (created by scripts/suggest_registry_matches.js) ─────
+// GET /api/clients/registry-suggestions?status=pending
+router.get('/registry-suggestions', roleCheck('admin', 'office'), async (req, res) => {
+  const status = ['pending', 'accepted', 'rejected'].includes(req.query.status) ? req.query.status : 'pending';
+  const { rows } = await pool.query(
+    `SELECT s.*, c.name AS client_name, c.eik AS client_eik, c.phone AS client_phone, c.email AS client_email,
+            c.address AS client_address, c.mol AS client_mol,
+            (SELECT COUNT(*) FROM orders o WHERE o.client_id = c.id)::int AS orders,
+            (SELECT COALESCE(SUM(sale_price),0) FROM orders o WHERE o.client_id = c.id)::numeric(12,2) AS turnover
+     FROM client_registry_suggestions s JOIN clients c ON c.id = s.client_id
+     WHERE s.status = $1
+     ORDER BY CASE s.confidence WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, turnover DESC`,
+    [status]);
+  res.json(rows);
+});
+
+// Fill a client card from a register record: empty fields only (ЕИК/ДДС/official name always)
+async function applyRecord(db, clientId, rec) {
+  const { rows: [c] } = await db.query('SELECT * FROM clients WHERE id=$1', [clientId]);
+  const set = { eik: rec.eik, vat_number: rec.vat_number || c.vat_number, legal_name: rec.full_name || c.legal_name };
+  for (const [k, v] of [['mol', rec.manager], ['address', rec.address], ['city', rec.city], ['phone', rec.phone],
+                        ['email', rec.email], ['website', rec.website]]) {
+    if (v && !c[k]) set[k] = v;
+  }
+  const keys = Object.keys(set);
+  await db.query(
+    `UPDATE clients SET ${keys.map((k, i) => `${k}=$${i + 1}`).join(', ')}, registry_checked_at=NOW(), updated_at=NOW()
+     WHERE id=$${keys.length + 1}`, [...keys.map(k => set[k]), clientId]);
+}
+
+// POST /api/clients/registry-suggestions/:sid/accept  { eik? } — accept the proposal (or one of the alternatives)
+router.post('/registry-suggestions/:sid/accept', roleCheck('admin', 'office'), async (req, res) => {
+  const { rows: [s] } = await pool.query('SELECT * FROM client_registry_suggestions WHERE id=$1', [req.params.sid]);
+  if (!s) return res.status(404).json({ error: 'Предложението не е намерено' });
+  let rec = s.candidate;
+  if (req.body.eik && req.body.eik !== rec?.eik) {
+    try {
+      rec = { ...(await registry.getByEik(req.body.eik)), ...(await registry.vies(req.body.eik)) };
+    } catch (err) {
+      return res.status(err.busy ? 429 : 502).json({ error: 'Търговският регистър не отговаря — опитайте след малко.' });
+    }
+  }
+  if (!rec?.eik) return res.status(400).json({ error: 'Няма избрана фирма' });
+  await applyRecord(pool, s.client_id, rec);
+  await pool.query(`UPDATE client_registry_suggestions SET status='accepted', decided_by=$1, decided_at=NOW() WHERE id=$2`,
+    [req.user.id, s.id]);
+  res.json({ ok: true });
+});
+
+// POST /api/clients/registry-suggestions/:sid/reject
+router.post('/registry-suggestions/:sid/reject', roleCheck('admin', 'office'), async (req, res) => {
+  const { rowCount } = await pool.query(
+    `UPDATE client_registry_suggestions SET status=$3, decided_by=$1, decided_at=NOW() WHERE id=$2`,
+    [req.user.id, req.params.sid, req.body?.filled_manually ? 'accepted' : 'rejected']);
+  if (!rowCount) return res.status(404).json({ error: 'Предложението не е намерено' });
+  res.json({ ok: true });
+});
+
 // GET /api/clients/:id — client card with server-side totals and paginated order history
 router.get('/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM clients WHERE id=$1', [req.params.id]);
@@ -84,7 +142,7 @@ router.get('/:id', async (req, res) => {
 
   const [orders, stats] = await Promise.all([
     pool.query(
-      `SELECT o.id, o.order_number, o.external_ref, o.status, o.order_type, o.order_category,
+      `SELECT o.id, o.order_number, o.external_ref, o.client_ref, o.status, o.order_type, o.order_category,
               o.payment_status, o.deadline, o.sale_price, o.is_urgent, o.created_at, o.delivered_at
        FROM orders o WHERE o.client_id=$1 ORDER BY o.created_at DESC, o.order_number DESC LIMIT $2`,
       [req.params.id, limit]),

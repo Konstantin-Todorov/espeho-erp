@@ -145,13 +145,13 @@ router.get('/', async (req, res) => {
   if (search) {
     params.push(`%${search.trim()}%`);
     const p = `$${params.length}`;
-    conds.push(`(c.name ILIKE ${p} OR o.order_number::text ILIKE ${p} OR o.external_ref ILIKE ${p} OR c.phone ILIKE ${p})`);
+    conds.push(`(c.name ILIKE ${p} OR o.order_number::text ILIKE ${p} OR o.external_ref ILIKE ${p} OR c.phone ILIKE ${p} OR o.client_ref ILIKE ${p})`);
   }
 
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 
   const query = `
-    SELECT o.id, o.order_number, o.external_ref, o.status, o.order_type, o.order_category,
+    SELECT o.id, o.order_number, o.external_ref, o.client_ref, o.status, o.order_type, o.order_category,
            o.payment_status, o.installation_status, o.fulfillment, o.deadline, o.is_urgent,
            o.created_at, o.updated_at, o.delivered_at, o.sale_price,
            c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
@@ -282,7 +282,7 @@ router.get('/:id', async (req, res) => {
 // ─── POST /api/orders ───────────────────────────────────────────────────────────
 router.post('/', roleCheck('admin', 'office'), async (req, res) => {
   const { client_id, order_type, order_category, deadline, is_urgent, sale_price, notes,
-          delivery_address, source, items, fulfillment, external_ref, initial_status, related_order_id } = req.body;
+          delivery_address, source, items, fulfillment, external_ref, initial_status, related_order_id, client_ref } = req.body;
   if (!client_id || !order_type) {
     return res.status(400).json({ error: 'Клиентът и типът са задължителни' });
   }
@@ -294,13 +294,13 @@ router.post('/', roleCheck('admin', 'office'), async (req, res) => {
     const { rows: [order] } = await client.query(
       `INSERT INTO orders (client_id, order_type, order_category, deadline, is_urgent, sale_price, notes,
                            delivery_address, source, created_by, fulfillment, external_ref, status,
-                           installation_status, related_order_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::order_status,$14,$15) RETURNING *`,
+                           installation_status, related_order_id, client_ref)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::order_status,$14,$15,$16) RETURNING *`,
       [client_id, order_type, order_category || 'нормална', deadline || null, !!is_urgent,
        n(sale_price), notes || null, delivery_address || null, source || 'office', req.user.id,
        fulfillment || 'вземане', external_ref?.trim() || null,
        ['НОВА', 'МАТЕРИАЛИ', 'ПРОИЗВОДСТВО'].includes(initial_status) ? initial_status : 'НОВА',
-       fulfillment === 'монтаж' ? 'ЗА_МОНТАЖ' : null, related_order_id || null]
+       fulfillment === 'монтаж' ? 'ЗА_МОНТАЖ' : null, related_order_id || null, client_ref?.trim() || null]
     );
     const priced = await insertItems(client, order.id, Array.isArray(items) ? items : [], order_type, settings);
     // No manual price given → the order price is the sum of its lines
@@ -436,6 +436,7 @@ const EDITABLE = {
   source:              v => v || 'office',
   external_ref:        v => (v?.trim?.() ? v.trim() : null),
   related_order_id:    v => v || null,
+  client_ref:          v => (v?.trim?.() ? v.trim().slice(0, 80) : null),
 };
 
 router.patch('/:id', roleCheck('admin', 'office'), async (req, res) => {
