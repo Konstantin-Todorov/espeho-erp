@@ -16,8 +16,8 @@ const DECISION_LABELS = { преработка: 'Преработка', отпи
 const PAGE_SIZE = 50
 
 const emptyForm = userId => ({
-  order_id: '', stage_id: '', machine_id: '', worker_id: userId || '', cause_type: 'човешка_грешка',
-  cause_notes: '', material_cost: '', labor_cost: '', decision: '', notes: '',
+  order_id: '', stage_id: '', machine_id: '', worker_id: userId || '', cause_type: 'счупено_рязане',
+  cause_notes: '', material_cost: '', labor_cost: '', decision: '', notes: '', responsibility: '',
 })
 
 function CreateDefectModal({ open, onClose, onCreated, prefillOrderId }) {
@@ -60,6 +60,7 @@ function CreateDefectModal({ open, onClose, onCreated, prefillOrderId }) {
         worker_id: form.worker_id || null,
         cause_type: form.cause_type,
         cause_notes: form.cause_notes || null,
+        responsibility: form.responsibility || null,
         decision: form.decision || null,
       }
       if (canSeePrices) {
@@ -104,6 +105,11 @@ function CreateDefectModal({ open, onClose, onCreated, prefillOrderId }) {
           <div>
             <label className="label">Причина *</label>
             <OptionSelect listKey="defect_cause" value={form.cause_type} onChange={v => set('cause_type', v)} required />
+          </div>
+          <div>
+            <label className="label">Чия е отговорността</label>
+            <OptionSelect listKey="defect_responsibility" value={form.responsibility} placeholder="— не е ясно"
+              onChange={v => set('responsibility', v)} />
           </div>
           <div>
             <label className="label">Машина</label>
@@ -288,6 +294,7 @@ export default function Defects() {
                   </td>
                   <td>
                     <div className="font-medium text-white">{optLabel('defect_cause', d.cause_type, CAUSE_LABELS)}</div>
+                    {d.responsibility && <div className="text-xs text-muted">Отговорност: {optLabel('defect_responsibility', d.responsibility)}</div>}
                     {d.cause_notes && <div className="text-xs text-muted">{d.cause_notes.slice(0, 60)}{d.cause_notes.length > 60 ? '...' : ''}</div>}
                   </td>
                   <td>

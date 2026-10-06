@@ -178,8 +178,9 @@ test('clone copies items once (no items × stages duplication)', async () => {
   const c = await call('POST', `/orders/${ids.order}/clone`, { role: 'office', body: {} });
   assert.equal(c.status, 201);
   const d = await call('GET', `/orders/${c.data.id}`, { role: 'office' });
+  const src = await call('GET', `/orders/${ids.order}`, { role: 'office' });
   assert.equal(d.data.items.length, 4);
-  assert.equal(d.data.stages.length, 4);
+  assert.equal(d.data.stages.length, src.data.stages.length);
 });
 
 test('defects: optional stage/machine, cause filter works', async () => {
@@ -267,4 +268,13 @@ test('order history records edits, lines and payments (office only)', async () =
   const actions = h.data.map(x => x.action);
   assert.ok(actions.includes('order_edit') && actions.includes('item_edit') && actions.includes('payment_add'));
   assert.equal((await call('GET', `/orders/${ids.order}/history`, { role: 'production' })).status, 403);
+});
+
+test('company details are text settings; defects keep responsibility', async () => {
+  const r = await call('PATCH', '/settings', { body: { company_phone: '0888 567 406' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.find(s => s.key === 'company_phone').value, '0888 567 406');
+  const d = await call('POST', '/defects', { role: 'office', body: { order_id: ids.order, cause_type: 'драскотина', responsibility: 'доставчик' } });
+  assert.equal(d.status, 201);
+  assert.equal(d.data.responsibility, 'доставчик');
 });

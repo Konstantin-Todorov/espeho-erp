@@ -14,6 +14,9 @@ const LIMITS = {
   price_markup_pct: [0, 500],
 };
 
+// Free-text company details shown on printouts
+const TEXT_KEYS = ['company_name', 'company_eik', 'company_vat', 'company_address', 'company_workshop', 'company_phone', 'company_email'];
+
 // GET /api/settings — admin & office (office needs VAT / minimum areas to price orders)
 router.get('/', roleCheck('admin', 'office'), async (req, res) => {
   const { rows } = await pool.query('SELECT key, value, label, hint, updated_at FROM app_settings ORDER BY key');
@@ -25,6 +28,10 @@ router.patch('/', roleCheck('admin'), async (req, res) => {
   const entries = Object.entries(req.body || {});
   if (!entries.length) return res.status(400).json({ error: 'Няма промени' });
   for (const [key, value] of entries) {
+    if (TEXT_KEYS.includes(key)) {
+      if (String(value ?? '').length > 300) return res.status(400).json({ error: 'Твърде дълъг текст' });
+      continue;
+    }
     const lim = LIMITS[key];
     if (!lim) return res.status(400).json({ error: `Непозната настройка: ${key}` });
     const v = Number(String(value).replace(',', '.'));
@@ -33,8 +40,8 @@ router.patch('/', roleCheck('admin'), async (req, res) => {
     }
   }
   for (const [key, value] of entries) {
-    await pool.query('UPDATE app_settings SET value=$1, updated_at=NOW() WHERE key=$2',
-      [String(Number(String(value).replace(',', '.'))), key]);
+    const v = TEXT_KEYS.includes(key) ? String(value ?? '').trim() : String(Number(String(value).replace(',', '.')));
+    await pool.query('UPDATE app_settings SET value=$1, updated_at=NOW() WHERE key=$2', [v, key]);
   }
   invalidateSettings();
   const { rows } = await pool.query('SELECT key, value, label, hint, updated_at FROM app_settings ORDER BY key');

@@ -8,7 +8,7 @@ const roleCheck = require('../middleware/roleCheck');
 const router = express.Router();
 router.use(auth);
 
-const KEY_RE = /^(defect_cause|payment_method|source|stage_extra|stages:(стъклопакет|единично_стъкло|смесена))$/;
+const KEY_RE = /^(defect_cause|defect_responsibility|payment_method|source|stage_extra|stages:(стъклопакет|единично_стъкло|смесена))$/;
 
 // GET /api/options — { list_key: [{id, value, label, sort_order, active}] } (active only unless ?all=1)
 router.get('/', async (req, res) => {

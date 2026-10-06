@@ -93,18 +93,18 @@ router.get('/summary', roleCheck('admin','office'), async (req, res) => {
 // POST /api/defects — anyone in the shop or office may record a defect.
 // worker_id = who is responsible (defaults to the reporter); reported_by = who entered it.
 router.post('/', roleCheck('admin','office','production'), async (req, res) => {
-  const { order_id, stage_id, machine_id, worker_id, cause_type, cause_notes, material_cost, labor_cost, decision, notes } = req.body;
+  const { order_id, stage_id, machine_id, worker_id, cause_type, cause_notes, material_cost, labor_cost, decision, notes, responsibility } = req.body;
   if (!order_id || !cause_type) {
     return res.status(400).json({ error: 'Поръчката и причината са задължителни' });
   }
   const canPrice = ['admin','office'].includes(req.user.role);
   const { rows } = await pool.query(
     `INSERT INTO defects (order_id, stage_id, worker_id, reported_by, machine_id, cause_type, cause_notes,
-                          material_cost, labor_cost, decision, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                          material_cost, labor_cost, decision, notes, responsibility)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [order_id, stage_id || null, worker_id || req.user.id, req.user.id, machine_id || null, cause_type,
      cause_notes || null, canPrice ? (+material_cost || 0) : 0, canPrice ? (+labor_cost || 0) : 0,
-     decision || null, notes || null]
+     decision || null, notes || null, responsibility || null]
   );
   res.status(201).json(stripMoney(req.user, rows[0], DEFECT_FIELDS));
 });

@@ -192,14 +192,14 @@ router.get('/price-hints', roleCheck('admin', 'office'), async (req, res) => {
       `SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY oi.unit_price)::numeric(10,2) AS median,
               MIN(oi.unit_price)::numeric(10,2) AS min, MAX(oi.unit_price)::numeric(10,2) AS max, COUNT(*)::int AS n
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
-       WHERE UPPER(oi.product_desc) = UPPER($1) AND oi.uom = $2 AND oi.unit_price > 0
-         AND o.order_category = 'нормална' AND o.created_at > NOW() - INTERVAL '12 months'`, [desc, uom]),
+       WHERE UPPER(oi.product_desc) = UPPER($1) AND oi.unit_price > 0
+         AND o.order_category = 'нормална' AND o.created_at > NOW() - INTERVAL '12 months'`, [desc]),
     req.query.client_id
       ? pool.query(
           `SELECT oi.unit_price, o.created_at, o.external_ref, o.order_number
            FROM order_items oi JOIN orders o ON o.id = oi.order_id
-           WHERE o.client_id = $1 AND UPPER(oi.product_desc) = UPPER($2) AND oi.uom = $3 AND oi.unit_price > 0
-           ORDER BY o.created_at DESC LIMIT 1`, [req.query.client_id, desc, uom])
+           WHERE o.client_id = $1 AND UPPER(oi.product_desc) = UPPER($2) AND oi.unit_price > 0
+           ORDER BY o.created_at DESC LIMIT 1`, [req.query.client_id, desc])
       : { rows: [] },
   ]);
   res.json({ usual: usual.rows[0].n ? usual.rows[0] : null, client_last: last.rows[0] || null });

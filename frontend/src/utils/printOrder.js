@@ -191,13 +191,17 @@ export function printDeliveryNote(order, settings = {}) {
 
 <div class="header">
   <div>
-    <div class="logo">ЕСПЕХО ООД</div>
+    <div class="logo">${esc(settings.company_name || 'ЕСПЕХО ООД')}</div>
     <div style="color:#666;font-size:11px;margin-top:2px;">Доставателна бележка</div>
     <div style="color:#333;font-size:13px;font-weight:bold;margin-top:6px;">№ ${no}</div>
   </div>
   <div style="text-align:right;font-size:11px;color:#555;">
     <div>Дата: <strong>${fmt(new Date())}</strong></div>
-    <div style="margin-top:4px;">ЕСПЕХО ООД</div>
+    <div style="margin-top:4px;font-weight:bold;">${esc(settings.company_name || 'ЕСПЕХО ООД')}</div>
+    ${settings.company_eik ? `<div>ЕИК ${esc(settings.company_eik)}${settings.company_vat ? ` · ДДС № ${esc(settings.company_vat)}` : ''}</div>` : ''}
+    ${settings.company_address ? `<div>${esc(settings.company_address)}</div>` : ''}
+    ${settings.company_phone ? `<div>тел. ${esc(settings.company_phone)}</div>` : ''}
+    ${settings.company_email ? `<div>${esc(settings.company_email)}</div>` : ''}
   </div>
 </div>
 

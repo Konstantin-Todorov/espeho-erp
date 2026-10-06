@@ -567,7 +567,7 @@ export default function OrderDetail() {
             <Printer className="w-4 h-4" /> Лист
           </button>
           {(isAdmin || user?.role === 'office') && (
-            <button className="btn-secondary" onClick={() => printDeliveryNote(order)} title="Доставателна бележка">
+            <button className="btn-secondary" onClick={() => printDeliveryNote(order, settings)} title="Доставателна бележка">
               <FileText className="w-4 h-4" /> Бележка
             </button>
           )}
