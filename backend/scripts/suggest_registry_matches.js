@@ -14,8 +14,7 @@ const registry = require('../src/utils/registry');
 const limit = parseInt((process.argv.find(a => a.startsWith('--limit=')) || '--limit=50').slice(8));
 const SKIP = ['КЛИЕНТ НА МЯСТО (БЕЗ ИМЕ)', 'МП', 'ОБЕКТ СЛАТИНА БЛ.246'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const norm = v => String(v || '').toUpperCase().replace(/["„“]/g, '')
-  .replace(/\s+(ЕООД|ООД|ЕАД|АД|ЕТ|СД|КД)$/, '').replace(/\s+/g, ' ').trim();
+const norm = registry.normName;
 const isSofia = r => /софия/i.test(r?.city || '') || /софия/i.test(r?.address || '');
 
 async function retry(fn) {
@@ -43,7 +42,7 @@ async function retry(fn) {
   for (const [i, c] of clients.entries()) {
     process.stdout.write(`${String(i + 1).padStart(2)}. ${c.name} …`);
     let hits = [];
-    try { hits = await retry(() => registry.searchByName(c.name)) } catch (e) { console.log(' грешка:', e.message); continue }
+    try { hits = (await retry(() => registry.searchByName(c.name))).filter(h => !h.deleted) } catch (e) { console.log(' грешка:', e.message); continue }
     await sleep(2500);
 
     const exact = hits.filter(h => norm(h.name) === norm(c.name));

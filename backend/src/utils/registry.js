@@ -17,6 +17,8 @@ async function getJson(url) {
     signal: AbortSignal.timeout(12000),
   });
   if (res.status === 429) throw Object.assign(new Error('busy'), { busy: true });
+  // Some searches (e.g. names with a hyphen) come back as an empty 200 — that simply means "nothing found"
+  if (res.ok && res.headers.get('content-length') === '0') return null;
   if (!res.ok || !(res.headers.get('content-type') || '').includes('json')) throw new Error(`Регистърът не отговаря (${res.status})`);
   const data = await res.json();
   cache.set(url, { at: Date.now(), data });
@@ -59,8 +61,11 @@ function parseSeat(raw = '') {
 
 async function searchByName(name) {
   const q = encodeURIComponent(String(name).trim().slice(0, 80));
-  const rows = await getJson(`${TR}/Summary?name=${q}&page=1&pageSize=10`);
-  return (rows || []).filter(r => !r.isPhysical).map(r => ({ eik: r.ident, name: r.name, full_name: r.companyFullName }));
+  const rows = (await getJson(`${TR}/Summary?name=${q}&page=1&pageSize=10`)) || [];
+  return rows.filter(r => !r.isPhysical).map(r => ({
+    eik: r.ident, name: r.name, full_name: text(r.companyFullName),
+    deleted: /заличен/i.test(r.companyFullName || ''),
+  }));
 }
 
 async function getByEik(eik) {
@@ -72,12 +77,13 @@ async function getByEik(eik) {
   return {
     eik: deed.uic,
     name: f.CR_F_2_L || deed.companyName,
-    full_name: deed.fullName || null,
+    full_name: deed.fullName ? text(deed.fullName).replace(/\s*-\s*Заличен търговец\/ЮЛНЦ\s*$/i, '') : null,
     legal_form: f.CR_F_3_L || null,
     activity: f.CR_F_6_L ? f.CR_F_6_L.slice(0, 300) : null,
     manager,
     // Warn only when the record itself mentions liquidation / termination / insolvency / deletion
-    closed: Object.entries(f).some(([k, v]) => k !== 'CR_F_6_L' && /ликвидац|прекратяван|несъстоятелност|заличаван/i.test(v)),
+    closed: /заличен/i.test(deed.fullName || '')
+      || Object.entries(f).some(([k, v]) => k !== 'CR_F_6_L' && /ликвидац|прекратяван|несъстоятелност|заличаван/i.test(v)),
     ...seat,
   };
 }
@@ -92,3 +98,9 @@ async function vies(eik) {
 }
 
 module.exports = { searchByName, getByEik, vies };
+
+// Compare company names ignoring case, quotes, hyphens/dots/spaces and the legal form
+const normName = v => String(v || '').toUpperCase()
+  .replace(/["„“'”]/g, '').replace(/\s+(ЕООД|ООД|ЕАД|АД|ЕТ|СД|КД|ЕТ)$/, '')
+  .replace(/[\s.\-–_]+/g, '').trim();
+module.exports.normName = normName;

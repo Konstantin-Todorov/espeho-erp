@@ -51,8 +51,8 @@ router.get('/lookup', roleCheck('admin', 'office'), async (req, res) => {
       return res.json(one ? [one] : []);
     }
     // The register rate-limits requests, so only the list is returned here; details load when one is picked
-    const norm = v => String(v || '').toUpperCase().replace(/["„“]/g, '').replace(/\s+(ЕООД|ООД|ЕАД|АД|ЕТ|СД|КД)$/,'').trim();
-    const hits = await registry.searchByName(q);
+    const norm = registry.normName;
+    const hits = (await registry.searchByName(q)).filter(h => !h.deleted);
     hits.sort((a, b) => (norm(b.name) === norm(q)) - (norm(a.name) === norm(q)));
     res.json(hits.slice(0, 10).map(h => ({ ...h, exact: norm(h.name) === norm(q) })));
   } catch (err) {
@@ -243,6 +243,14 @@ router.post('/:id/merge', roleCheck('admin', 'office'), async (req, res) => {
        SELECT UPPER(REGEXP_REPLACE(TRIM(name), '\\s+', ' ', 'g')), $1 FROM clients WHERE id = ANY($2)
        ON CONFLICT (name_key) DO UPDATE SET client_id = EXCLUDED.client_id`, [target.id, fromIds]);
     await client.query('UPDATE client_aliases SET client_id=$1 WHERE client_id = ANY($2)', [target.id, fromIds]);
+    // keep_as_ref: the duplicates were sites/stages/branches of this client ("ВАЛМАН-ЕТАП 1") — the part of
+    // the old name after the client's name becomes the order's client reference
+    if (req.body.keep_as_ref) {
+      await client.query(
+        `UPDATE orders o SET client_ref = COALESCE(o.client_ref, NULLIF(TRIM(BOTH ' -.' FROM
+            CASE WHEN UPPER(c.name) LIKE UPPER($1) || '%' THEN SUBSTRING(c.name FROM LENGTH($1) + 1) ELSE c.name END), ''))
+         FROM clients c WHERE c.id = o.client_id AND o.client_id = ANY($2)`, [target.name, fromIds]);
+    }
     const moved = await client.query('UPDATE orders SET client_id=$1 WHERE client_id = ANY($2)', [target.id, fromIds]);
     await client.query('UPDATE quotations SET client_id=$1 WHERE client_id = ANY($2)', [target.id, fromIds]);
     await client.query('DELETE FROM clients WHERE id = ANY($1)', [fromIds]);

@@ -225,6 +225,19 @@ UPDATE _imp_o i SET client_id = (SELECT c.id FROM clients c
                                   WHERE UPPER(REGEXP_REPLACE(TRIM(c.name), '\s+', ' ', 'g')) = i.client
                                   ORDER BY c.created_at LIMIT 1)
  WHERE i.client_id IS NULL;
+-- "ВАЛМАН-ЕТАП 3", "ВИЕНВИ-ЕТ.6": an existing client + a site/stage marker → that client, marker as reference
+WITH m AS (
+  SELECT i.seq, x.id, x.name FROM _imp_o i
+  CROSS JOIN LATERAL (
+    SELECT c.id, c.name FROM clients c
+     WHERE LENGTH(c.name) >= 3 AND i.client LIKE c.name || '%' AND i.client <> c.name
+       AND SUBSTRING(i.client FROM LENGTH(c.name) + 1) ~ '^[ -./]+(ЕТАП|ЕТ\.|ВХОД|БЛ\.?|АП\.?|ОБЕКТ|[0-9])'
+     ORDER BY LENGTH(c.name) DESC LIMIT 1) x
+  WHERE i.client_id IS NULL)
+UPDATE _imp_o i SET client_id = m.id,
+       client_ref = COALESCE(i.client_ref, NULLIF(TRIM(BOTH ' -./' FROM SUBSTRING(i.client FROM LENGTH(m.name) + 1)), ''))
+  FROM m WHERE m.seq = i.seq;
+
 INSERT INTO clients (name, source, notes)
 SELECT DISTINCT i.client, 'office',
        CASE WHEN i.client = 'КЛИЕНТ НА МЯСТО (БЕЗ ИМЕ)' THEN 'Поръчки без име на клиент в таблицата' END

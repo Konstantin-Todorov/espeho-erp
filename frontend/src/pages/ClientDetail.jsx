@@ -19,6 +19,7 @@ function MergeModal({ open, onClose, client, onMerged }) {
   const [results, setResults] = useState([])
   const [picked, setPicked] = useState([])
   const [saving, setSaving] = useState(false)
+  const [asRef, setAsRef] = useState(true)
 
   useEffect(() => {
     if (!open) { setQ(''); setPicked([]); return }
@@ -36,7 +37,7 @@ function MergeModal({ open, onClose, client, onMerged }) {
   const merge = async () => {
     setSaving(true)
     try {
-      const { data } = await api.post(`/clients/${client.id}/merge`, { from_ids: picked.map(p => p.id) })
+      const { data } = await api.post(`/clients/${client.id}/merge`, { from_ids: picked.map(p => p.id), keep_as_ref: asRef })
       toast.success(`Обединени ${data.merged} клиента · ${data.orders_moved} поръчки преместени`)
       onMerged(); onClose()
     } catch (err) { toast.error(err.response?.data?.error || 'Грешка') }
@@ -45,7 +46,7 @@ function MergeModal({ open, onClose, client, onMerged }) {
 
   return (
     <Modal open={open} onClose={onClose} title={`Обедини дубликати в „${client.name}“`} size="md">
-      <p className="text-sm text-muted mb-3">Изберете записите, които са същият клиент. Поръчките и офертите им ще се преместят тук, а дубликатите ще се изтрият.</p>
+      <p className="text-sm text-muted mb-3">Изберете записите, които са същият клиент (или негови обекти/етапи). Поръчките и офертите им ще се преместят тук, а дубликатите ще се изтрият. Старите имена се запомнят за бъдещо внасяне от Excel.</p>
       <input className="input mb-3" placeholder="Търси…" value={q} onChange={e => setQ(e.target.value)} autoFocus />
       <div className="max-h-72 overflow-y-auto space-y-1">
         {results.map(c => {
@@ -60,6 +61,13 @@ function MergeModal({ open, onClose, client, onMerged }) {
         })}
         {q.trim().length >= 2 && !results.length && <p className="text-center text-muted text-sm py-4">Няма съвпадения</p>}
       </div>
+      <label className="flex items-start gap-2 mt-3 text-sm cursor-pointer">
+        <input type="checkbox" className="mt-1" checked={asRef} onChange={e => setAsRef(e.target.checked)} />
+        <span>
+          <span className="text-white">Запази разликата в името като референция</span>
+          <span className="block text-xs text-muted">Напр. „{client.name}-ЕТАП 1“ → поръчките отиват при „{client.name}“ с реф. „ЕТАП 1“ (обект, етап, клон).</span>
+        </span>
+      </label>
       <div className="flex gap-2 justify-end mt-4">
         <button className="btn-secondary" onClick={onClose}>Откажи</button>
         <button className="btn-primary" disabled={!picked.length || saving} onClick={merge}>
