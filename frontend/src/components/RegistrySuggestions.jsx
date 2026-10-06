@@ -7,8 +7,8 @@ import RegistryLookup from './RegistryLookup'
 import { eurRound } from '../utils/labels'
 
 const CONF = {
-  high:   { label: 'Сигурно', cls: 'bg-green-500/15 text-green-400' },
-  medium: { label: 'Вероятно', cls: 'bg-yellow-500/15 text-yellow-400' },
+  high:   { label: 'Единствена фирма с това име', cls: 'bg-green-500/15 text-green-400' },
+  medium: { label: 'Вероятно (в София)', cls: 'bg-yellow-500/15 text-yellow-400' },
   low:    { label: 'За проверка', cls: 'bg-orange-500/15 text-orange-400' },
   none:   { label: 'Няма съвпадение', cls: 'bg-border text-muted' },
 }
@@ -55,6 +55,7 @@ export default function RegistrySuggestions({ onChanged }) {
       <p className="text-sm text-muted">
         За най-големите клиенти без ЕИК системата е потърсила фирмата в Търговския регистър.
         „Приеми“ попълва ЕИК, ДДС №, официалното име и празните полета (МОЛ, адрес, телефон, имейл). Попълнените данни не се променят.
+        Проверете града и управителя — съвпадение по име не винаги е същата фирма.
       </p>
       {rows.map(s => {
         const c = s.candidate
