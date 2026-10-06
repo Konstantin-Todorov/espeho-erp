@@ -105,7 +105,7 @@ function DeliveryModal({ open, onClose, delivery, onSaved }) {
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Записва...' : <><Check className="w-4 h-4" strokeWidth={2} />Запази</>}
+            {loading ? 'Записва…' : <><Check className="w-4 h-4" strokeWidth={2} />Запази</>}
           </button>
         </div>
       </form>
@@ -177,7 +177,7 @@ function NewDeliveryModal({ open, onClose, onSaved }) {
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading || !form.order_id}>
-            {loading ? 'Записва...' : '+ Създай доставка'}
+            {loading ? 'Записва…' : '+ Създай доставка'}
           </button>
         </div>
       </form>

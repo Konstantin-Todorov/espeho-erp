@@ -177,7 +177,7 @@ function LogLaborModal({ open, onClose, orderId, stages, workers, currentUser, o
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={() => { onClose(); reset() }}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading || !form.minutes}>
-            {loading ? 'Записва...' : <><Check className="w-4 h-4" /> Запиши работата</>}
+            {loading ? 'Записва…' : <><Check className="w-4 h-4" /> Запиши работата</>}
           </button>
         </div>
       </form>
@@ -380,11 +380,11 @@ function AddStageInline({ orderId, onAdded }) {
         value={name}
         onChange={setName}
         suggestions={suggestions}
-        placeholder="Напиши или избери етап..."
+        placeholder="Напиши или избери етап…"
         className="flex-1"
       />
       <button className="btn-primary py-1.5 text-sm" onClick={handleSave} disabled={saving || !name.trim()}>
-        {saving ? '...' : 'Добави'}
+        {saving ? '…' : 'Добави'}
       </button>
       <button className="btn-secondary py-1.5 text-sm" onClick={() => { setOpen(false); setName('') }}>
         Откажи
@@ -888,13 +888,13 @@ export default function OrderDetail() {
               <div className="flex gap-2">
                 <input
                   className="input flex-1"
-                  placeholder="Напишете коментар..."
+                  placeholder="Напишете коментар…"
                   value={newComment}
                   onChange={e => setNewComment(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendComment()}
                 />
                 <button className="btn-primary px-4" onClick={sendComment} disabled={sendingComment || !newComment.trim()}>
-                  {sendingComment ? '...' : 'Изпрати'}
+                  {sendingComment ? '…' : 'Изпрати'}
                 </button>
               </div>
             </div>
@@ -905,7 +905,7 @@ export default function OrderDetail() {
             <div className="space-y-2">
               <label className={`flex items-center justify-center gap-2 border border-dashed border-border rounded-xl py-3 text-sm cursor-pointer hover:border-accent/50 hover:text-white transition-colors text-muted ${uploadingFile ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Upload className="w-4 h-4" />
-                {uploadingFile ? 'Качва се...' : '+ Прикачи файл (PDF, снимка, чертеж до 20MB)'}
+                {uploadingFile ? 'Качва се…' : '+ Прикачи файл (PDF, снимка, чертеж до 20MB)'}
                 <input type="file" className="hidden" onChange={uploadFile} accept=".pdf,.jpg,.jpeg,.png,.dwg,.dxf,.xlsx,.docx" />
               </label>
               {order.files.length === 0 && (

@@ -107,7 +107,7 @@ function ReceiveModal({ poId, onClose, onSaved }) {
           <p className="text-xs text-muted">Количествата се добавят към наличността в избрания склад. Ако приемете по-малко, поръчката остава „Частично приета“.</p>
           <div className="flex gap-3 justify-end">
             <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
-            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Записва...' : <><Check className="w-4 h-4" strokeWidth={2} />Приеми в склада</>}</button>
+            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Записва…' : <><Check className="w-4 h-4" strokeWidth={2} />Приеми в склада</>}</button>
           </div>
         </form>
       )}
@@ -173,7 +173,7 @@ function SupplierFormModal({ open, onClose, onSaved, editData }) {
           </div>
           <div>
             <label className="label">ДДС номер</label>
-            <input className="input" value={form.vat_number} onChange={e=>setForm(f=>({...f,vat_number:e.target.value}))} placeholder="BG..." />
+            <input className="input" value={form.vat_number} onChange={e=>setForm(f=>({...f,vat_number:e.target.value}))} placeholder="BG…" />
           </div>
           <div className="col-span-2">
             <label className="label">Адрес</label>
@@ -188,7 +188,7 @@ function SupplierFormModal({ open, onClose, onSaved, editData }) {
         <div className="flex gap-3 justify-end">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Записва...' : editData ? <><Check className="w-4 h-4" strokeWidth={2} />Запази</> : '+ Добави'}
+            {loading ? 'Записва…' : editData ? <><Check className="w-4 h-4" strokeWidth={2} />Запази</> : '+ Добави'}
           </button>
         </div>
       </form>
@@ -323,7 +323,7 @@ function POFormModal({ open, onClose, onSaved, suppliers }) {
         <div className="flex gap-3 justify-end">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading || !form.supplier_id}>
-            {loading ? 'Записва...' : '+ Създай поръчката'}
+            {loading ? 'Записва…' : '+ Създай поръчката'}
           </button>
         </div>
       </form>

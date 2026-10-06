@@ -128,7 +128,7 @@ function InlineEdit({ label, value, onSave, type = 'text', textarea = false }) {
             />
           )}
           <button onClick={save} disabled={saving} className="btn-primary text-xs py-1 px-2" title="Запази" aria-label="Запази">
-            {saving ? '...' : <Check className="w-4 h-4" strokeWidth={2} />}
+            {saving ? '…' : <Check className="w-4 h-4" strokeWidth={2} />}
           </button>
           <button onClick={cancel} className="btn-secondary text-xs py-1 px-2" title="Откажи" aria-label="Откажи"><X className="w-4 h-4" strokeWidth={2} /></button>
         </div>
@@ -169,7 +169,7 @@ function InlineSelect({ label, value, options, onSave }) {
             onChange={e => { setVal(e.target.value); save(e.target.value) }} autoFocus>
             {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          {saving && <span className="text-muted text-xs">...</span>}
+          {saving && <span className="text-muted text-xs">…</span>}
           <button onClick={() => setEditing(false)} className="btn-secondary text-xs py-1 px-2" title="Откажи" aria-label="Откажи"><X className="w-4 h-4" strokeWidth={2} /></button>
         </div>
       ) : (

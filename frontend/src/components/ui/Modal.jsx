@@ -25,7 +25,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
           </button>
         </div>
         {/* Body */}
-        <div className="p-6 overflow-y-auto max-h-[80vh]">{children}</div>
+        <div className="p-6 overflow-y-auto overscroll-contain max-h-[80vh]">{children}</div>
       </div>
     </div>
   )

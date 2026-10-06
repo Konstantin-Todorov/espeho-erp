@@ -103,13 +103,13 @@ function MachineFormModal({ open, onClose, machine, onDone }) {
           </div>
           <div className="col-span-2">
             <label className="label">Бележки</label>
-            <textarea className="input resize-none" rows={2} placeholder="Допълнителна информация..." value={form.notes} onChange={e=>f('notes',e.target.value)} />
+            <textarea className="input resize-none" rows={2} placeholder="Допълнителна информация…" value={form.notes} onChange={e=>f('notes',e.target.value)} />
           </div>
         </div>
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading || !form.name}>
-            {loading ? 'Записва...' : isEdit ? 'Запази промените' : 'Добави машина'}
+            {loading ? 'Записва…' : isEdit ? 'Запази промените' : 'Добави машина'}
           </button>
         </div>
       </form>
@@ -172,13 +172,13 @@ function MaintenanceModal({ open, onClose, machine, onDone }) {
         <div>
           <label className="label">Описание на работата *</label>
           <textarea className="input resize-none" rows={3} required
-            placeholder="Какво е направено, сменени части, забелязани проблеми..."
+            placeholder="Какво е направено, сменени части, забелязани проблеми…"
             value={form.notes} onChange={e=>f('notes',e.target.value)} />
         </div>
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Записва...' : <><Check className="w-4 h-4" strokeWidth={2} />Запиши поддръжка</>}
+            {loading ? 'Записва…' : <><Check className="w-4 h-4" strokeWidth={2} />Запиши поддръжка</>}
           </button>
         </div>
       </form>

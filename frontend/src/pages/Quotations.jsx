@@ -185,7 +185,7 @@ function QuoteFormModal({ open, onClose, onSaved, editData }) {
           <div className="flex gap-3 justify-end">
             <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
             <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Записва...' : isEdit ? <><Check className="w-4 h-4" strokeWidth={2} />Запази промените</> : '+ Създай оферта'}
+              {loading ? 'Записва…' : isEdit ? <><Check className="w-4 h-4" strokeWidth={2} />Запази промените</> : '+ Създай оферта'}
             </button>
           </div>
         </div>
@@ -257,7 +257,7 @@ function ConvertModal({ open, onClose, quote, onConverted }) {
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Създава...' : <><Check className="w-4 h-4" strokeWidth={2} />Създай поръчка</>}
+            {loading ? 'Създава…' : <><Check className="w-4 h-4" strokeWidth={2} />Създай поръчка</>}
           </button>
         </div>
       </form>

@@ -89,7 +89,7 @@ function ReceiveModal({ open, onClose, onDone, materials, locations, preselect }
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Записва...' : <><PackagePlus className="w-4 h-4" strokeWidth={2} />Добави наличност</>}
+            {loading ? 'Записва…' : <><PackagePlus className="w-4 h-4" strokeWidth={2} />Добави наличност</>}
           </button>
         </div>
       </form>
@@ -157,7 +157,7 @@ function IssueModal({ open, onClose, onDone, materials, locations, preselect }) 
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-danger" disabled={loading}>
-            {loading ? 'Изписва...' : <><PackageMinus className="w-4 h-4" strokeWidth={2} />Изпиши материала</>}
+            {loading ? 'Изписва…' : <><PackageMinus className="w-4 h-4" strokeWidth={2} />Изпиши материала</>}
           </button>
         </div>
       </form>
@@ -231,7 +231,7 @@ function MaterialFormModal({ open, onClose, material, onDone, showPrices }) {
                 </button>
               ))}
             </div>
-            <input className="input" required placeholder="или напишете..." value={form.unit} onChange={e => f('unit', e.target.value)} />
+            <input className="input" required placeholder="или напишете…" value={form.unit} onChange={e => f('unit', e.target.value)} />
           </div>
           {showPrices && (
             <div>
@@ -249,13 +249,13 @@ function MaterialFormModal({ open, onClose, material, onDone, showPrices }) {
         </div>
         <div>
           <label className="label">Описание / бележка</label>
-          <textarea className="input resize-none" rows={2} placeholder="Допълнителна информация..."
+          <textarea className="input resize-none" rows={2} placeholder="Допълнителна информация…"
             value={form.description} onChange={e => f('description', e.target.value)} />
         </div>
         <div className="flex gap-3 justify-end pt-1">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading || !form.name}>
-            {loading ? 'Записва...' : isEdit ? 'Запази промените' : '+ Добави материал'}
+            {loading ? 'Записва…' : isEdit ? 'Запази промените' : '+ Добави материал'}
           </button>
         </div>
       </form>
@@ -301,7 +301,7 @@ function LocationFormModal({ open, onClose, location, onDone }) {
         <div className="flex gap-3 justify-end">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading || !form.name}>
-            {loading ? 'Записва...' : isEdit ? 'Запази' : '+ Добави локация'}
+            {loading ? 'Записва…' : isEdit ? 'Запази' : '+ Добави локация'}
           </button>
         </div>
       </form>
@@ -596,7 +596,7 @@ export default function Warehouse() {
         <>
           <div className="flex flex-wrap gap-3 mb-4 items-center justify-between">
             <div className="flex gap-3 flex-wrap">
-              <input className="input w-52" placeholder="Търси по наименование или код..."
+              <input className="input w-52" placeholder="Търси по наименование или код…"
                 value={search} onChange={e => setSearch(e.target.value)} />
               <select className="select w-44" value={category} onChange={e => setCategory(e.target.value)}>
                 <option value="">Всички категории</option>

@@ -14,6 +14,8 @@ export function ThemeProvider({ children }) {
     } else {
       root.classList.remove('light')
     }
+    // Browser chrome (mobile address bar) matches the page background
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#f8fafc' : '#0f1117')
     localStorage.setItem('erp-theme', theme)
   }, [theme])
 

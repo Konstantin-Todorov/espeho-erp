@@ -95,7 +95,7 @@ export default function Profile() {
                     autoFocus
                   />
                   <button className="btn-primary py-1 text-sm" onClick={handleSaveName} disabled={savingName}>
-                    {savingName ? '...' : 'Запази'}
+                    {savingName ? '…' : 'Запази'}
                   </button>
                   <button className="btn-secondary py-1 text-sm" onClick={() => { setEditName(false); setName(profile.name) }}>
                     Откажи
@@ -193,7 +193,7 @@ export default function Profile() {
               className="btn-primary"
               disabled={savingPw || (pwForm.new_password !== pwForm.confirm)}
             >
-              {savingPw ? 'Запазване...' : 'Смени паролата'}
+              {savingPw ? 'Запазване…' : 'Смени паролата'}
             </button>
           </div>
         </form>

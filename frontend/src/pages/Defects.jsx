@@ -143,7 +143,7 @@ function CreateDefectModal({ open, onClose, onCreated, prefillOrderId }) {
         <div>
           <label className="label">Описание на причината</label>
           <textarea className="input resize-none" rows={2} value={form.cause_notes}
-            onChange={e => set('cause_notes', e.target.value)} placeholder="Опишете какво точно се е случило..." />
+            onChange={e => set('cause_notes', e.target.value)} placeholder="Опишете какво точно се е случило…" />
         </div>
         <div className="flex gap-3 justify-end">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
@@ -295,7 +295,7 @@ export default function Defects() {
                   <td>
                     <div className="font-medium text-white">{optLabel('defect_cause', d.cause_type, CAUSE_LABELS)}</div>
                     {d.responsibility && <div className="text-xs text-muted">Отговорност: {optLabel('defect_responsibility', d.responsibility)}</div>}
-                    {d.cause_notes && <div className="text-xs text-muted">{d.cause_notes.slice(0, 60)}{d.cause_notes.length > 60 ? '...' : ''}</div>}
+                    {d.cause_notes && <div className="text-xs text-muted">{d.cause_notes.slice(0, 60)}{d.cause_notes.length > 60 ? '…' : ''}</div>}
                   </td>
                   <td>
                     <div>{d.worker_name}</div>

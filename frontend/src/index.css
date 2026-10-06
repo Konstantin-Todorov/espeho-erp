@@ -17,6 +17,28 @@
   --chart-tick-y:  #9ca3af;
 }
 
+/* Native controls and scrollbars follow the theme; taps on tablets react without the double-tap delay */
+:root { color-scheme: dark; }
+:root.light { color-scheme: light; }
+html { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+/* Visible keyboard focus for links and plain buttons (mouse clicks don't show it) */
+a:focus-visible, button:focus-visible, [role="button"]:focus-visible, summary:focus-visible {
+  outline: 2px solid rgb(59 130 246);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Respect the OS "reduce motion" setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 :root.light {
   /* light */
   --rgb-bg:      248 250 252;   /* slate-50  */
@@ -55,7 +77,8 @@
 
   .btn {
     @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm
-           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+           transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
   }
   .btn-primary   { @apply btn bg-accent hover:bg-blue-500 text-white; }
   .btn-secondary { @apply btn bg-border hover:bg-gray-600 text-gray-200; }
@@ -78,6 +101,8 @@
   thead tr         { @apply border-b border-border; }
   th               { @apply px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide; }
   td               { @apply px-4 py-3 text-gray-200; }
+  /* Money and counts line up digit under digit */
+  td.text-right, th.text-right { font-variant-numeric: tabular-nums; }
   tbody tr         { @apply border-b border-border/50 hover:bg-border/30 transition-colors; }
   tbody tr:last-child { @apply border-b-0; }
 }
