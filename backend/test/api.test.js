@@ -414,3 +414,13 @@ test('commission is a share of the profit (15.7%)', async () => {
   const row = r.data.rows.find(x => +x.profit > 0);
   assert.equal(row.commission, Math.round(+row.profit * 15.7) / 100);
 });
+
+test('home page: biggest clients for the owner, no margin for the office', async () => {
+  const a = await call('GET', '/reports/dashboard');
+  assert.equal(a.status, 200);
+  assert.ok(a.data.topClients.length > 0);
+  assert.notEqual(a.data.topClients[0].margin, undefined);
+  const o = await call('GET', '/reports/dashboard', { role: 'office' });
+  assert.equal(o.data.topClients[0].margin, undefined);
+  assert.equal(o.data.ytd.margin, undefined);
+});

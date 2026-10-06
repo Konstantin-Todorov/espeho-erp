@@ -96,6 +96,15 @@ router.get('/dashboard', async (req, res) => {
         AND COALESCE(o.sale_price,0) > 0`),
   ]);
 
+  // Biggest clients this year (by hand-over date) — the owner's first question after "how much"
+  const { rows: topClients } = await pool.query(`
+    SELECT c.id, c.name, COUNT(*)::int AS orders,
+           COALESCE(SUM(o.sale_price),0)::numeric(12,2) AS revenue,
+           COALESCE(SUM(o.sale_price / $1 - COALESCE(oc.total_cost,0)),0)::numeric(12,2) AS margin
+    FROM orders o JOIN clients c ON c.id = o.client_id LEFT JOIN order_costs oc ON oc.order_id = o.id
+    WHERE ${SOLD} AND ${SOLD_AT} >= DATE_TRUNC('year', NOW())
+    GROUP BY c.id, c.name ORDER BY revenue DESC LIMIT 8`, [vat]);
+
   let quotationsPending = 0, deliveriesPending = 0;
   const [qRes, dRes] = await Promise.all([
     pool.query("SELECT COUNT(*)::int AS c FROM quotations WHERE status IN ('DRAFT','SENT')"),
@@ -118,6 +127,8 @@ router.get('/dashboard', async (req, res) => {
     ytd: stripCost(req.user, { ...y, margin: (+y.revenue_net - +y.cost).toFixed(2) }),
     monthly: stripCost(req.user, monthly.rows),
     receivables: receivables.rows[0],
+    topClients: stripCost(req.user, topClients),
+    vatDivisor: vat,
     quotationsPending,
     deliveriesPending,
   });

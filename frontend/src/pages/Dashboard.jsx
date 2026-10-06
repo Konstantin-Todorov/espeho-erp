@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 import { OrderStatusBadge } from '../components/ui/StatusBadge'
@@ -13,19 +13,14 @@ import { format, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
 import {
   Factory, CheckCircle2, Clock, CalendarDays, Banknote, TrendingUp, Grid2x2, Wallet, FileText,
-  Truck, AlertTriangle, Package, PackagePlus, ArrowUpDown, Info,
+  Truck, AlertTriangle, Package, PackagePlus, ArrowUpDown, Info, ClipboardList,
 } from 'lucide-react'
-
-const STATUS_COLORS = {
-  'НОВА':'#3b82f6','МАТЕРИАЛИ':'#f59e0b','ПРОИЗВОДСТВО':'#f97316',
-  'ГОТОВА':'#22c55e','ДОСТАВЕНА':'#6b7280','ОТКАЗАНА':'#ef4444',
-}
 
 function StatCard({ label, value, sub, color = 'text-white', icon: Icon, tooltip, delta, to }) {
   const card = (
-    <div className={`card flex items-start gap-4 h-full ${to ? 'hover:border-accent/50 transition-colors' : ''}`}>
+    <div className={`card flex items-start gap-3 sm:gap-4 h-full ${to ? 'hover:border-accent/50 transition-colors' : ''}`}>
       {Icon && (
-        <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+        <div className="hidden sm:flex w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 items-center justify-center flex-shrink-0">
           <Icon className="w-5 h-5 text-accent" strokeWidth={1.75} />
         </div>
       )}
@@ -38,7 +33,7 @@ function StatCard({ label, value, sub, color = 'text-white', icon: Icon, tooltip
             </TooltipUI>
           )}
         </div>
-        <p className={`text-xl xl:text-2xl font-bold whitespace-nowrap tabular-nums ${color}`}>{value}</p>
+        <p className={`text-lg sm:text-xl xl:text-2xl font-bold whitespace-nowrap tabular-nums ${color}`}>{value}</p>
         {sub && <p className="text-xs text-muted mt-0.5">{sub}</p>}
         {delta !== undefined && (
           <p className={`text-xs mt-0.5 font-medium ${delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : 'text-muted'}`}>
@@ -70,7 +65,6 @@ function AdminDashboard() {
 
   const statusMap = {}
   data.orderStats.forEach(s => { statusMap[s.status] = s.count })
-  const pieData = data.orderStats.filter(s => !['ДОСТАВЕНА','ОТКАЗАНА'].includes(s.status))
 
   const inProduction = statusMap['ПРОИЗВОДСТВО'] || 0
   const readyForDelivery = statusMap['ГОТОВА'] || 0
@@ -78,8 +72,22 @@ function AdminDashboard() {
   const dueThisWeek = data.urgentActive?.due_this_week || 0
   const ytd = data.ytd || {}
   const ytdMarginPct = +ytd.revenue_net > 0 ? (+ytd.margin / +ytd.revenue_net * 100).toFixed(1) : null
-  const monthly = (data.monthly || []).map(m => ({ ...m, revenue: +m.revenue, m2: +m.m2 }))
+  const vat = +data.vatDivisor || 1.2
+  // Chart in money without VAT so revenue and margin are comparable bars
+  const monthly = (data.monthly || []).map(m => ({
+    ...m, revenue_net: Math.round(+m.revenue / vat), margin: m.margin !== undefined ? Math.round(+m.margin) : undefined, m2: +m.m2,
+  }))
   const year = new Date().getFullYear()
+
+  // This month vs last month (hand-over date)
+  const monthKey = d => format(d, 'yyyy-MM')
+  const now = new Date()
+  const cur = monthly.find(m => m.month.startsWith(monthKey(now))) || {}
+  const prev = monthly.find(m => m.month.startsWith(monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1)))) || {}
+  const monthName = d => format(d, 'LLLL', { locale: bg })
+  const prevName = monthName(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+  const curMarginPct = cur.revenue_net > 0 && cur.margin !== undefined ? (cur.margin / cur.revenue_net * 100).toFixed(1) : null
+  const tip = { background: 'var(--chart-bg)', border: '1px solid var(--chart-border)', borderRadius: 8, fontSize: 12 }
 
   return (
     <div>
@@ -91,9 +99,121 @@ function AdminDashboard() {
         <Link to="/board" className="btn-primary">Работен ден →</Link>
       </div>
 
-      {/* Row 1 — what needs attention now */}
-      <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Сега</p>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {canSeePrices && (
+        <>
+          {/* Row 1 — this month, compared with last month */}
+          <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">{monthName(now)} до днес</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <StatCard to="/reports" label="Приход" value={eurRound(cur.revenue || 0)} color="text-green-400"
+              sub={`${prevName}: ${eurRound(prev.revenue || 0)} · с ДДС`}
+              tooltip="Предадени поръчки този месец (по дата на предаване), с ДДС" icon={Banknote} />
+            {cur.margin !== undefined ? (
+              <StatCard to="/reports?tab=paid" label="Марж" value={eurRound(cur.margin || 0)}
+                sub={`${curMarginPct !== null ? curMarginPct + '% · ' : ''}${prevName}: ${eurRound(prev.margin || 0)}`}
+                color={+cur.margin > 0 ? 'text-green-400' : 'text-muted'}
+                tooltip="Приход без ДДС − себестойност (по формулата от таблицата)" icon={TrendingUp} />
+            ) : (
+              <StatCard label="Средна поръчка" value={cur.orders ? eurRound(+cur.revenue / cur.orders) : '—'} sub="с ДДС" icon={TrendingUp} />
+            )}
+            <StatCard to="/orders?tab=all" label="Нови поръчки" value={num(data.revenue?.total_orders || 0, 0)}
+              sub={`${prevName}: ${num(data.prevMonth?.total_orders || 0, 0)}`}
+              tooltip="Приети поръчки този месец (по дата на създаване)" icon={ClipboardList} />
+            <StatCard to="/reports" label="Предадени м²" value={num(cur.m2 || 0, 0)} color="text-accent"
+              sub={`${prevName}: ${num(prev.m2 || 0, 0)} м²`} tooltip="Квадратура на предадените поръчки този месец" icon={Grid2x2} />
+          </div>
+
+          {/* Row 2 — the year so far */}
+          <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">{year} до днес</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <StatCard to="/reports" label="Приход" value={eurRound(ytd.revenue)} color="text-green-400"
+              sub={`${num(ytd.orders, 0)} предадени поръчки · с ДДС`}
+              tooltip="Предадени поръчки (без гаранции/вътрешни), по дата на предаване" icon={Banknote} />
+            {ytd.margin !== undefined ? (
+              <StatCard to="/reports?tab=paid" label="Марж" value={eurRound(ytd.margin)}
+                sub={`${ytdMarginPct !== null ? ytdMarginPct + '% от прихода · ' : ''}без ДДС`}
+                color={+ytd.margin > 0 ? 'text-green-400' : 'text-danger'}
+                tooltip="(Приход без ДДС − себестойност). Подробно по поръчки — Отчети → Платени поръчки" icon={TrendingUp} />
+            ) : (
+              <StatCard to="/orders?tab=all" label="Средна поръчка" value={+ytd.orders > 0 ? eurRound(+ytd.revenue / +ytd.orders) : '—'}
+                sub="с ДДС" icon={TrendingUp} />
+            )}
+            <StatCard to="/reports" label="Произведени м²" value={num(ytd.m2, 0)} color="text-accent"
+              sub={+ytd.m2 > 0 ? `≈ ${eur(+ytd.revenue / +ytd.m2, { dash: false })} на м²` : ''}
+              tooltip="Квадратура на предадените поръчки" icon={Grid2x2} />
+            <StatCard to="/orders?tab=unpaid" label="Дължат клиенти" value={eurRound(data.receivables?.amount)}
+              sub={`${num(data.receivables?.count, 0)} ${+data.receivables?.count === 1 ? 'поръчка' : 'поръчки'}`}
+              color={+data.receivables?.amount > 0 ? 'text-yellow-400' : 'text-muted'}
+              tooltip="Предадени на клиента, но не платени изцяло" icon={Wallet} />
+          </div>
+
+          {/* Charts — months and the biggest clients */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="card lg:col-span-2">
+              <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">
+                {monthly[0]?.margin !== undefined ? 'Приход и марж по месеци (без ДДС)' : 'Приход по месеци (без ДДС)'}
+              </h2>
+              {monthly.length === 0 ? (
+                <p className="text-center text-muted text-sm py-16">Още няма предадени поръчки за последните 12 месеца</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={230}>
+                  <BarChart data={monthly} margin={{ top: 0, right: 0, left: 10, bottom: 0 }} barGap={2}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fill: 'var(--chart-tick)', fontSize: 11 }}
+                      tickFormatter={d => format(parseISO(d), 'LLL yy', { locale: bg })} />
+                    <YAxis tick={{ fill: 'var(--chart-tick)', fontSize: 11 }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
+                    <Tooltip contentStyle={tip} cursor={{ fill: 'var(--chart-grid)', opacity: 0.3 }}
+                      labelFormatter={d => format(parseISO(d), 'LLLL yyyy', { locale: bg })}
+                      formatter={(v, name, item) => name === 'revenue_net'
+                        ? [`${eur(v, { dash: false })} · ${num(item.payload.m2, 0)} м² · ${item.payload.orders} поръчки`, 'Приход']
+                        : [`${eur(v, { dash: false })}${item.payload.revenue_net > 0 ? ` · ${(v / item.payload.revenue_net * 100).toFixed(0)}%` : ''}`, 'Марж']} />
+                    {monthly[0]?.margin !== undefined && (
+                      <Legend formatter={v => (v === 'revenue_net' ? 'Приход' : 'Марж')} wrapperStyle={{ fontSize: 12 }} />
+                    )}
+                    <Bar dataKey="revenue_net" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    {monthly[0]?.margin !== undefined && <Bar dataKey="margin" fill="#22c55e" radius={[4, 4, 0, 0]} />}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Най-големи клиенти {year}</h2>
+                <Link to="/reports?tab=clients" className="text-xs text-accent hover:underline">Всички →</Link>
+              </div>
+              {!(data.topClients || []).length ? (
+                <p className="text-center text-muted text-sm py-12">Няма данни</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {data.topClients.map(c => {
+                    const max = +data.topClients[0].revenue || 1
+                    return (
+                      <Link key={c.id} to={`/clients/${c.id}`} className="block group">
+                        <div className="flex items-baseline justify-between gap-2 text-sm">
+                          <span className="text-white truncate group-hover:text-accent">{c.name}</span>
+                          <span className="text-white tabular-nums whitespace-nowrap">{eurRound(c.revenue)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex-1 h-1.5 rounded-full bg-border overflow-hidden">
+                            <div className="h-full bg-accent rounded-full" style={{ width: `${(+c.revenue / max) * 100}%` }} />
+                          </div>
+                          <span className="text-[11px] text-muted whitespace-nowrap">
+                            {c.orders} поръч.{c.margin !== undefined && +c.revenue > 0 ? ` · марж ${(+c.margin / (+c.revenue / vat) * 100).toFixed(0)}%` : ''}
+                          </span>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Shop floor right now */}
+      <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Цехът сега</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <StatCard to="/orders?status=ПРОИЗВОДСТВО" label="В производство" value={inProduction} color="text-orange-400"
           tooltip="Поръчки, които се работят в цеха в момента" icon={Factory} />
         <StatCard to="/orders?status=ГОТОВА" label="Готови за предаване" value={readyForDelivery} color="text-green-400"
@@ -105,36 +225,6 @@ function AdminDashboard() {
           color={dueThisWeek > 3 ? 'text-yellow-400' : 'text-white'}
           tooltip="Поръчки със срок в следващите 7 дни" icon={CalendarDays} />
       </div>
-
-      {/* Row 2 — the year so far (money only for admin/office) */}
-      {canSeePrices && (
-        <>
-          <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">{year} до днес</p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StatCard to="/reports" label="Приход" value={eurRound(ytd.revenue)} color="text-green-400"
-              sub={`${num(ytd.orders, 0)} предадени поръчки · с ДДС`}
-              tooltip="Предадени поръчки (без гаранции/вътрешни), по дата на предаване" icon={Banknote} />
-            {ytd.margin !== undefined ? (
-              <StatCard to="/reports?tab=paid" label="Марж" value={ytdMarginPct !== null ? `${ytdMarginPct}%` : '—'}
-                sub={`${eurRound(ytd.margin)} без ДДС`}
-                color={+ytd.margin > 0 ? 'text-green-400' : 'text-danger'}
-                tooltip="(Приход без ДДС − себестойност) / приход без ДДС" icon={TrendingUp} />
-            ) : (
-              <StatCard to="/orders?tab=all" label="Средна поръчка" value={+ytd.orders > 0 ? eurRound(+ytd.revenue / +ytd.orders) : '—'}
-                sub="с ДДС" icon={TrendingUp} />
-            )}
-            <StatCard to="/reports" label="Произведени м²" value={num(ytd.m2, 0)} color="text-accent"
-              sub={+ytd.m2 > 0 ? `≈ ${eur(+ytd.revenue / +ytd.m2, { dash: false })} на м²` : ''}
-              tooltip="Квадратура на предадените поръчки" icon={Grid2x2} />
-            <StatCard to="/orders?tab=unpaid" label="Дължат клиенти" value={eurRound(data.receivables?.amount)}
-              sub={`${num(data.receivables?.count, 0)} поръчки`}
-              color={+data.receivables?.amount > 0 ? 'text-yellow-400' : 'text-muted'}
-              tooltip="Предадени на клиента, но не платени изцяло" icon={Wallet} />
-          </div>
-        </>
-      )}
-
-      {/* Row 3 — follow-ups */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard to="/quotations" label="Оферти чакат отговор" value={data.quotationsPending ?? 0}
           color={(data.quotationsPending ?? 0) > 0 ? 'text-accent' : 'text-muted'} icon={FileText} />
@@ -147,61 +237,6 @@ function AdminDashboard() {
           <StatCard to="/warehouse?tab=low-stock" label="Материали под минимум" value={data.lowStockCount}
             color={data.lowStockCount > 0 ? 'text-yellow-400' : 'text-muted'} icon={Package} />
         ) : <div className="hidden lg:block" />}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="card">
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">Активни поръчки по статус</h2>
-          {pieData.length === 0 ? (
-            <p className="text-center text-muted text-sm py-12">Няма активни поръчки</p>
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie data={pieData} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={65} innerRadius={30}>
-                    {pieData.map(entry => <Cell key={entry.status} fill={STATUS_COLORS[entry.status] || '#6b7280'} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background:'var(--chart-bg)', border:'1px solid var(--chart-border)', borderRadius:8, fontSize:12 }}
-                    formatter={(val, name) => [`${val} поръчки`, name]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-1">
-                {pieData.map(entry => (
-                  <Link key={entry.status} to={`/orders?status=${entry.status}`} className="flex items-center gap-1.5 text-xs hover:text-accent">
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[entry.status] || '#6b7280' }} />
-                    <span className="text-muted">{entry.status}</span>
-                    <span className="text-white font-medium ml-auto">{entry.count}</span>
-                  </Link>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="card lg:col-span-2">
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">
-            {canSeePrices ? 'Приход по месеци (с ДДС)' : 'Предадени поръчки по месеци'}
-          </h2>
-          {monthly.length === 0 ? (
-            <p className="text-center text-muted text-sm py-16">Още няма предадени поръчки за последните 12 месеца</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={monthly} margin={{ top: 0, right: 0, left: canSeePrices ? 10 : -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
-                <XAxis dataKey="month" tick={{ fill:'var(--chart-tick)', fontSize:11 }}
-                  tickFormatter={d => format(parseISO(d), 'LLL yy', { locale: bg })} />
-                <YAxis tick={{ fill:'var(--chart-tick)', fontSize:11 }} allowDecimals={false}
-                  tickFormatter={v => canSeePrices ? `${Math.round(v / 1000)}k` : v} />
-                <Tooltip contentStyle={{ background:'var(--chart-bg)', border:'1px solid var(--chart-border)', borderRadius:8, fontSize:12 }}
-                  labelFormatter={d => format(parseISO(d), 'LLLL yyyy', { locale: bg })}
-                  formatter={(v, name, item) => name === 'revenue'
-                    ? [`${eur(v, { dash: false })} · ${num(item.payload.m2, 0)} м² · ${item.payload.orders} поръчки`, 'Приход']
-                    : [v, 'Поръчки']} />
-                <Bar dataKey={canSeePrices ? 'revenue' : 'orders'} fill="#3b82f6" radius={[4,4,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
       </div>
 
       {/* Active orders */}
