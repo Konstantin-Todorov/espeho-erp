@@ -1,20 +1,117 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import Modal from '../components/ui/Modal'
+import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
-import { format, parseISO } from 'date-fns'
-import { bg } from 'date-fns/locale'
+import { dateBg, todayStr, num } from '../utils/labels'
 
-function fmt(d) {
-  if (!d) return '—'
-  try { return format(parseISO(d), 'd MMM yyyy', { locale: bg }) } catch { return d }
-}
+const fmt = d => dateBg(d)
 
 const PO_STATUS = {
-  DRAFT:     { label: 'Чернова',   color: 'bg-gray-500/20 text-gray-400' },
-  SENT:      { label: 'Изпратена', color: 'bg-blue-500/20 text-blue-400' },
-  RECEIVED:  { label: 'Получена',  color: 'bg-green-500/20 text-green-400' },
-  CANCELLED: { label: 'Отказана',  color: 'bg-red-500/20 text-red-400' },
+  DRAFT:     { label: 'Чернова',          color: 'bg-gray-500/20 text-gray-400' },
+  SENT:      { label: 'Изпратена',        color: 'bg-blue-500/20 text-blue-400' },
+  PARTIAL:   { label: 'Частично приета',  color: 'bg-yellow-500/20 text-yellow-400' },
+  RECEIVED:  { label: 'Приета',           color: 'bg-green-500/20 text-green-400' },
+  CANCELLED: { label: 'Отказана',         color: 'bg-red-500/20 text-red-400' },
+}
+const OPEN_PO = ['DRAFT', 'SENT', 'PARTIAL']
+
+// ─── Receive goods into stock ─────────────────────────────────────────────────
+function ReceiveModal({ poId, onClose, onSaved }) {
+  const [po, setPO] = useState(null)
+  const [locations, setLocations] = useState([])
+  const [locationId, setLocationId] = useState('')
+  const [qty, setQty] = useState({})
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!poId) return
+    setPO(null)
+    Promise.all([api.get(`/suppliers/purchase-orders/${poId}`), api.get('/warehouse/locations')])
+      .then(([poRes, locRes]) => {
+        setPO(poRes.data)
+        setLocations(locRes.data)
+        setLocationId(locRes.data[0]?.id || '')
+        setQty(Object.fromEntries((poRes.data.items || []).map(it => {
+          const rest = Math.max(0, Number(it.quantity || 0) - Number(it.received_qty || 0))
+          return [it.id, rest ? String(rest) : '']
+        })))
+      })
+      .catch(err => { toast.error(err.response?.data?.error || 'Поръчката не може да бъде заредена'); onClose() })
+  }, [poId])
+
+  const submit = async e => {
+    e.preventDefault()
+    if (!locationId) return toast.error('Изберете склад/локация')
+    const items = Object.entries(qty)
+      .filter(([, v]) => Number(v) > 0)
+      .map(([poi_id, v]) => ({ poi_id, received_qty: Number(v) }))
+    if (!items.length) return toast.error('Въведете получено количество')
+    setSaving(true)
+    try {
+      const { data } = await api.post(`/suppliers/purchase-orders/${poId}/receive`, { location_id: locationId, items })
+      toast.success(data.status === 'PARTIAL' ? 'Приета частично — остатъкът чака' : 'Стоката е приета в склада')
+      onSaved()
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Грешка')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open={!!poId} onClose={onClose} title={`Приеми стоката${po ? ` — ${po.po_number} · ${po.supplier_name}` : ''}`} size="lg">
+      {!po ? <div className="text-center py-10 text-muted">Зарежда се…</div> : (
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="label">Склад / локация *</label>
+            <select className="select" value={locationId} onChange={e => setLocationId(e.target.value)} required>
+              {!locations.length && <option value="">— Няма складове</option>}
+              {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </div>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr><th>Артикул</th><th className="text-right">Поръчано</th><th className="text-right">Прието досега</th><th className="text-right">Приемам сега</th></tr>
+              </thead>
+              <tbody>
+                {(po.items || []).map(it => {
+                  const unit = it.unit || it.material_unit || ''
+                  const done = Number(it.received_qty || 0) >= Number(it.quantity || 0)
+                  return (
+                    <tr key={it.id}>
+                      <td>
+                        <div className="text-white font-medium">{it.material_name || it.description || '—'}</div>
+                        {it.material_name && it.description && it.description !== it.material_name && (
+                          <div className="text-xs text-muted">{it.description}</div>
+                        )}
+                        {!it.material_id && <div className="text-xs text-muted">без материал — не влиза в наличността</div>}
+                      </td>
+                      <td className="text-right whitespace-nowrap">{num(it.quantity)} {unit}</td>
+                      <td className={`text-right whitespace-nowrap ${done ? 'text-green-400' : 'text-muted'}`}>{num(it.received_qty || 0)} {unit}</td>
+                      <td className="text-right">
+                        <input type="number" min="0" step="any" className="input w-28 text-right ml-auto"
+                          value={qty[it.id] ?? ''} onChange={e => setQty(q => ({ ...q, [it.id]: e.target.value }))} />
+                      </td>
+                    </tr>
+                  )
+                })}
+                {!(po.items || []).length && (
+                  <tr><td colSpan={4} className="text-center text-muted py-6">Поръчката няма артикули</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-muted">Количествата се добавят към наличността в избрания склад. Ако приемете по-малко, поръчката остава „Частично приета“.</p>
+          <div className="flex gap-3 justify-end">
+            <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
+            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Записва...' : '✓ Приеми в склада'}</button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  )
 }
 
 // ─── Supplier Form Modal ──────────────────────────────────────────────────────
@@ -125,7 +222,8 @@ function POFormModal({ open, onClose, onSaved, suppliers }) {
     setLoading(true)
     try {
       await api.post('/suppliers/purchase-orders', form)
-      toast.success('Поръчката е създадена')
+      toast.success('Поръчката към доставчик е създадена')
+      setForm({ supplier_id:'', expected_date:'', notes:'', items:[] })
       onSaved()
       onClose()
     } catch (err) {
@@ -134,7 +232,7 @@ function POFormModal({ open, onClose, onSaved, suppliers }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Нова поръчка за доставчик (PO)" size="xl">
+    <Modal open={open} onClose={onClose} title="Нова поръчка към доставчик" size="xl">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -224,7 +322,7 @@ function POFormModal({ open, onClose, onSaved, suppliers }) {
         <div className="flex gap-3 justify-end">
           <button type="button" className="btn-secondary" onClick={onClose}>Откажи</button>
           <button type="submit" className="btn-primary" disabled={loading || !form.supplier_id}>
-            {loading ? 'Записва...' : '+ Създай PO'}
+            {loading ? 'Записва...' : '+ Създай поръчката'}
           </button>
         </div>
       </form>
@@ -234,7 +332,11 @@ function POFormModal({ open, onClose, onSaved, suppliers }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Suppliers() {
+  const { isOffice } = useAuth()
+  const canEditSuppliers = isOffice // backend: suppliers POST/PATCH are admin/office only
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab]               = useState('suppliers')
+  const [receivePO, setReceivePO]   = useState(null)
   const [suppliers, setSuppliers]   = useState([])
   const [pos, setPOs]               = useState([])
   const [loading, setLoading]       = useState(true)
@@ -257,6 +359,19 @@ export default function Suppliers() {
 
   useEffect(() => { fetchSuppliers() }, [])
 
+  // Global "+ Нов": ?new=1 → new purchase order, ?new=supplier → new supplier
+  const newParam = searchParams.get('new')
+  useEffect(() => {
+    const n = newParam
+    if (!n) return
+    if (n === 'supplier') {
+      if (canEditSuppliers) { setEditSup(null); setFormOpen(true) }
+    } else { setTab('pos'); setPOFormOpen(true) }
+    const next = new URLSearchParams(searchParams)
+    next.delete('new')
+    setSearchParams(next, { replace: true })
+  }, [newParam])
+
   const openEdit = (s) => { setEditSup(s); setFormOpen(true) }
 
   const updatePOStatus = async (id, status) => {
@@ -276,15 +391,17 @@ export default function Suppliers() {
         </div>
         <div className="flex gap-2">
           {tab === 'pos' && (
-            <button className="btn-primary" onClick={() => setPOFormOpen(true)}>+ Нова PO</button>
+            <button className="btn-primary" onClick={() => setPOFormOpen(true)}>+ Нова поръчка към доставчик</button>
           )}
-          <button className="btn-secondary" onClick={() => { setEditSup(null); setFormOpen(true) }}>+ Нов доставчик</button>
+          {canEditSuppliers && (
+            <button className="btn-secondary" onClick={() => { setEditSup(null); setFormOpen(true) }}>+ Нов доставчик</button>
+          )}
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-border gap-1 mb-6">
-        {[{ id:'suppliers',label:'Доставчици' },{ id:'pos',label:'Поръчки (PO)' }].map(t => (
+        {[{ id:'suppliers',label:'Доставчици' },{ id:'pos',label:'Поръчки към доставчици' }].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === t.id ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-white'}`}>
@@ -301,7 +418,7 @@ export default function Suppliers() {
               <div className="card text-center py-16">
                 <div className="text-4xl mb-3">🏭</div>
                 <p className="text-white font-semibold mb-1">Няма доставчици</p>
-                <button className="btn-primary mt-3" onClick={() => setFormOpen(true)}>+ Нов доставчик</button>
+                {canEditSuppliers && <button className="btn-primary mt-3" onClick={() => { setEditSup(null); setFormOpen(true) }}>+ Нов доставчик</button>}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -312,7 +429,7 @@ export default function Suppliers() {
                         <h3 className="font-semibold text-white">{s.name}</h3>
                         {s.contact && <p className="text-muted text-xs mt-0.5">👤 {s.contact}</p>}
                       </div>
-                      <button className="btn-ghost text-xs py-1 px-2" onClick={() => openEdit(s)}>✏️</button>
+                      {canEditSuppliers && <button className="btn-ghost text-xs py-1 px-2" onClick={() => openEdit(s)}>✏️</button>}
                     </div>
                     <div className="space-y-1.5 text-sm">
                       {s.phone && <p className="text-muted">📞 {s.phone}</p>}
@@ -335,7 +452,7 @@ export default function Suppliers() {
               <div className="card text-center py-16">
                 <div className="text-4xl mb-3">📋</div>
                 <p className="text-white font-semibold mb-1">Няма поръчки към доставчици</p>
-                <button className="btn-primary mt-3" onClick={() => setPOFormOpen(true)}>+ Нова PO</button>
+                <button className="btn-primary mt-3" onClick={() => setPOFormOpen(true)}>+ Нова поръчка към доставчик</button>
               </div>
             ) : (
               <div className="table-container">
@@ -363,7 +480,7 @@ export default function Suppliers() {
                         </td>
                         <td className="text-muted">{po.item_count}</td>
                         <td className="font-medium text-white">{Number(po.total_amount).toFixed(2)} €</td>
-                        <td className={`text-sm ${po.expected_date && new Date(po.expected_date) < new Date() && po.status !== 'RECEIVED' ? 'text-danger' : 'text-gray-300'}`}>
+                        <td className={`text-sm ${po.expected_date && String(po.expected_date).slice(0, 10) < todayStr() && OPEN_PO.includes(po.status) ? 'text-danger' : 'text-gray-300'}`}>
                           {fmt(po.expected_date)}
                         </td>
                         <td>
@@ -372,9 +489,9 @@ export default function Suppliers() {
                               <button className="btn-ghost text-xs py-1 px-2 text-blue-400"
                                 onClick={() => updatePOStatus(po.id, 'SENT')}>Изпрати</button>
                             )}
-                            {po.status === 'SENT' && (
+                            {OPEN_PO.includes(po.status) && (
                               <button className="btn-ghost text-xs py-1 px-2 text-green-400"
-                                onClick={() => updatePOStatus(po.id, 'RECEIVED')}>✓ Получи</button>
+                                onClick={() => setReceivePO(po.id)}>📥 Приеми стоката</button>
                             )}
                             {['DRAFT','SENT'].includes(po.status) && (
                               <button className="btn-ghost text-xs py-1 px-2 text-danger"
@@ -400,6 +517,7 @@ export default function Suppliers() {
         open={poFormOpen} onClose={() => setPOFormOpen(false)}
         onSaved={fetchSuppliers} suppliers={suppliers}
       />
+      <ReceiveModal poId={receivePO} onClose={() => setReceivePO(null)} onSaved={fetchSuppliers} />
     </div>
   )
 }

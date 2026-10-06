@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
 import toast from 'react-hot-toast'
+import { SOURCE_LABELS, dateBg, num } from '../utils/labels'
 
-const SOURCE_LABELS = { phone:'Телефон', email:'Email', office:'Офис', website:'Уебсайт', referral:'Препоръка', other:'Друго' }
+const PAGE_SIZE = 50
 
 export default function Clients() {
   const [clients, setClients] = useState([])
@@ -14,23 +15,35 @@ export default function Clients() {
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState('orders')
   const [page, setPage] = useState(1)
   const { isOffice } = useAuth()
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
+
+  // Quick create from the "+ Нов" menu
+  useEffect(() => {
+    if (params.get('new')) { setCreateOpen(true); setParams({}, { replace: true }) }
+  }, [params])
+
+  useEffect(() => {
+    const t = setTimeout(() => { setQuery(search); setPage(1) }, 300)
+    return () => clearTimeout(t)
+  }, [search])
 
   const fetchClients = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (search) params.set('search', search)
-      params.set('page', page)
-      const { data } = await api.get(`/clients?${params}`)
+      const { data } = await api.get('/clients', { params: { search: query || undefined, page, limit: PAGE_SIZE, sort } })
       setClients(data.data)
       setTotal(data.total)
-    } finally { setLoading(false) }
-  }, [search, page])
+    } catch { toast.error('Грешка при зареждане') }
+    finally { setLoading(false) }
+  }, [query, page, sort])
 
   useEffect(() => { fetchClients() }, [fetchClients])
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <div>
@@ -44,16 +57,21 @@ export default function Clients() {
         )}
       </div>
 
-      <div className="mb-4">
-        <input className="input w-64" placeholder="Търси по име, телефон, email..."
-          value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <input className="input w-full sm:w-72" placeholder="Търси по име, телефон, ЕИК, град…"
+          value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="select w-auto" value={sort} onChange={e => { setSort(e.target.value); setPage(1) }}>
+          <option value="orders">Най-много поръчки</option>
+          <option value="recent">Последна поръчка</option>
+          <option value="name">По азбучен ред</option>
+        </select>
       </div>
 
       {loading ? <PageLoader /> : (
         <div className="table-container">
           <table>
             <thead>
-              <tr><th>Клиент</th><th>Телефон</th><th>Email</th><th>Град</th><th>Канал</th><th>Поръчки</th></tr>
+              <tr><th>Клиент</th><th>Телефон</th><th className="hidden md:table-cell">Email</th><th className="hidden md:table-cell">Град</th><th className="text-right">Поръчки</th><th className="hidden sm:table-cell">Последна</th></tr>
             </thead>
             <tbody>
               {clients.length === 0 && <tr><td colSpan={6} className="text-center py-12 text-muted">Няма намерени клиенти</td></tr>}
@@ -64,10 +82,10 @@ export default function Clients() {
                     {c.eik && <p className="text-xs text-muted">ЕИК: {c.eik}</p>}
                   </td>
                   <td className="text-muted">{c.phone || '—'}</td>
-                  <td className="text-muted text-sm">{c.email || '—'}</td>
-                  <td className="text-muted">{c.city || '—'}</td>
-                  <td><span className="badge bg-border text-muted">{SOURCE_LABELS[c.source] || c.source}</span></td>
-                  <td className="text-center font-medium text-white">{c.order_count || 0}</td>
+                  <td className="text-muted text-sm hidden md:table-cell">{c.email || '—'}</td>
+                  <td className="text-muted hidden md:table-cell">{c.city || '—'}</td>
+                  <td className="text-right font-medium text-white">{num(c.order_count || 0, 0)}</td>
+                  <td className="text-muted text-xs hidden sm:table-cell">{dateBg(c.last_order_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -75,15 +93,15 @@ export default function Clients() {
         </div>
       )}
 
-      {total > 50 && (
-        <div className="flex justify-center gap-2 mt-4">
+      {pages > 1 && (
+        <div className="flex justify-center items-center gap-2 mt-4">
           <button className="btn-secondary" disabled={page===1} onClick={() => setPage(p=>p-1)}>← Назад</button>
-          <span className="px-4 py-2 text-sm text-muted">Страница {page}</span>
-          <button className="btn-secondary" disabled={clients.length<50} onClick={() => setPage(p=>p+1)}>Напред →</button>
+          <span className="px-3 text-sm text-muted">Страница {page} от {pages}</span>
+          <button className="btn-secondary" disabled={page>=pages} onClick={() => setPage(p=>p+1)}>Напред →</button>
         </div>
       )}
 
-      <CreateClientModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={() => fetchClients()} />
+      <CreateClientModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={c => navigate(`/clients/${c.id}`)} />
     </div>
   )
 }
@@ -96,9 +114,9 @@ function CreateClientModal({ open, onClose, onCreated }) {
     e.preventDefault()
     setLoading(true)
     try {
-      await api.post('/clients', form)
+      const { data } = await api.post('/clients', form)
       toast.success('Клиентът е създаден')
-      onCreated(); onClose()
+      onCreated(data); onClose()
       setForm({ name:'', phone:'', email:'', address:'', city:'', eik:'', source:'office', notes:'' })
     } catch (err) { toast.error(err.response?.data?.error || 'Грешка') }
     finally { setLoading(false) }
@@ -130,7 +148,7 @@ function CreateClientModal({ open, onClose, onCreated }) {
           </div>
         </div>
         <div>
-          <label className="label">Канал</label>
+          <label className="label">Откъде научи за нас</label>
           <select className="select" value={form.source} onChange={e=>setForm(f=>({...f,source:e.target.value}))}>
             {Object.entries(SOURCE_LABELS).map(([v,l]) => <option key={v} value={v}>{l}</option>)}
           </select>

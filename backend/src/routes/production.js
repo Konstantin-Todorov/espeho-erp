@@ -25,7 +25,7 @@ router.get('/board', async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT o.id, o.order_number, o.status, o.order_type, o.deadline, o.is_urgent,
-             o.created_at, c.name AS client_name,
+             o.created_at, o.external_ref, c.name AS client_name,
              json_agg(
                json_build_object(
                  'id', ps.id, 'stage_name', ps.stage_name,

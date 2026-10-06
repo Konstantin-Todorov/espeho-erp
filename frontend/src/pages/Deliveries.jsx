@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import Modal from '../components/ui/Modal'
+import OrderPicker from '../components/ui/OrderPicker'
 import toast from 'react-hot-toast'
-import { format, parseISO } from 'date-fns'
-import { bg } from 'date-fns/locale'
+import { orderNo, dateBg, todayStr } from '../utils/labels'
 
 const STATUS_CONFIG = {
   PENDING:    { label: 'Изчаква',      color: 'bg-blue-500/20 text-blue-400' },
@@ -18,10 +18,8 @@ function StatusBadge({ status }) {
   return <span className={`badge ${s.color}`}>{s.label}</span>
 }
 
-function fmt(d) {
-  if (!d) return '—'
-  try { return format(typeof d === 'string' ? parseISO(d) : d, 'd MMM yyyy', { locale: bg }) } catch { return d }
-}
+// scheduled_date is a plain 'YYYY-MM-DD' string (DATE column)
+const fmt = d => dateBg(d)
 
 // ─── Edit Delivery Modal ──────────────────────────────────────────────────────
 function DeliveryModal({ open, onClose, delivery, onSaved }) {
@@ -36,7 +34,7 @@ function DeliveryModal({ open, onClose, delivery, onSaved }) {
       setForm({
         status: delivery.status || 'PENDING',
         driver_name: delivery.driver_name || '',
-        scheduled_date: delivery.scheduled_date?.slice(0, 10) || '',
+        scheduled_date: delivery.scheduled_date || '',
         address: delivery.address || '',
         notes: delivery.notes || '',
         recipient_name: delivery.recipient_name || '',
@@ -59,7 +57,7 @@ function DeliveryModal({ open, onClose, delivery, onSaved }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Доставка — ${delivery?.order_number}`} size="md">
+    <Modal open={open} onClose={onClose} title={`Доставка — ${delivery ? orderNo(delivery) : ''}`} size="md">
       <form onSubmit={handleSave} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -88,7 +86,7 @@ function DeliveryModal({ open, onClose, delivery, onSaved }) {
           <>
             <div>
               <label className="label">Получател (подпис от)</label>
-              <input className="input" value={form.recipient_name} placeholder="Ime на получателя…"
+              <input className="input" value={form.recipient_name} placeholder="Име на получателя…"
                 onChange={e => setForm(f => ({...f,recipient_name:e.target.value}))} />
             </div>
             <div>
@@ -116,15 +114,20 @@ function DeliveryModal({ open, onClose, delivery, onSaved }) {
 
 // ─── New Delivery Modal ───────────────────────────────────────────────────────
 function NewDeliveryModal({ open, onClose, onSaved }) {
-  const [form, setForm] = useState({ order_id: '', driver_name: '', scheduled_date: '', address: '', notes: '' })
-  const [orders, setOrders] = useState([])
+  const empty = { order_id: '', driver_name: '', scheduled_date: '', address: '', notes: '' }
+  const [form, setForm] = useState(empty)
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    if (open) {
-      api.get('/orders?status=ГОТОВА&limit=100').then(r => setOrders(r.data.data || [])).catch(() => {})
-    }
-  }, [open])
+  // Picking an order pre-fills its delivery address
+  const pickOrder = async order => {
+    setForm(f => ({ ...f, order_id: order?.id || '' }))
+    if (!order) return
+    try {
+      const { data } = await api.get(`/orders/${order.id}`)
+      const addr = data.delivery_address || data.client_address
+      if (addr) setForm(f => (f.address ? f : { ...f, address: addr }))
+    } catch { /* address stays empty */ }
+  }
 
   const handleSave = async e => {
     e.preventDefault()
@@ -132,6 +135,7 @@ function NewDeliveryModal({ open, onClose, onSaved }) {
     try {
       await api.post('/deliveries', form)
       toast.success('Доставката е създадена')
+      setForm(empty)
       onSaved()
       onClose()
     } catch (err) {
@@ -143,11 +147,9 @@ function NewDeliveryModal({ open, onClose, onSaved }) {
     <Modal open={open} onClose={onClose} title="Нова доставка" size="md">
       <form onSubmit={handleSave} className="space-y-4">
         <div>
-          <label className="label">Поръчка (ГОТОВА за доставка) *</label>
-          <select className="select" value={form.order_id} onChange={e => setForm(f => ({...f,order_id:e.target.value}))} required>
-            <option value="">— Изберете поръчка</option>
-            {orders.map(o => <option key={o.id} value={o.id}>{o.order_number} — {o.client_name}</option>)}
-          </select>
+          <label className="label">Поръчка *</label>
+          <OrderPicker value={form.order_id} onChange={pickOrder} />
+          <p className="text-xs text-muted mt-1">Търсете по № (вкл. оригиналния, напр. 326-00160) или клиент. Показват се само активни поръчки.</p>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -157,7 +159,7 @@ function NewDeliveryModal({ open, onClose, onSaved }) {
           </div>
           <div>
             <label className="label">Шофьор</label>
-            <input className="input" placeholder="Ime…" value={form.driver_name}
+            <input className="input" placeholder="Име…" value={form.driver_name}
               onChange={e => setForm(f => ({...f,driver_name:e.target.value}))} />
           </div>
         </div>
@@ -189,23 +191,43 @@ export default function Deliveries() {
   const [filter, setFilter]         = useState({ status: '', from: '', to: '' })
   const [editDel, setEditDel]       = useState(null)
   const [newOpen, setNewOpen]       = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const today = todayStr()
 
-  const fetchDeliveries = async () => {
+  const fetchDeliveries = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (filter.status) params.set('status', filter.status)
-      if (filter.from)   params.set('from', filter.from)
-      if (filter.to)     params.set('to', filter.to)
-      const { data } = await api.get(`/deliveries?${params}`)
+      const params = { limit: 200 }
+      if (filter.status) params.status = filter.status
+      if (filter.from)   params.from = filter.from
+      if (filter.to)     params.to = filter.to
+      const { data } = await api.get('/deliveries', { params })
       setDeliveries(data)
-    } catch { toast.error('Грешка при зареждане') }
+    } catch (err) { toast.error(err.response?.data?.error || 'Грешка при зареждане') }
     finally { setLoading(false) }
+  }, [filter])
+
+  useEffect(() => { fetchDeliveries() }, [fetchDeliveries])
+
+  // ?new=1 from the global "+ Нов" menu
+  const newParam = searchParams.get('new')
+  useEffect(() => {
+    if (newParam) {
+      setNewOpen(true)
+      const next = new URLSearchParams(searchParams)
+      next.delete('new')
+      setSearchParams(next, { replace: true })
+    }
+  }, [newParam])
+
+  const setStatus = async (d, status) => {
+    try {
+      await api.patch(`/deliveries/${d.id}`, { status })
+      fetchDeliveries()
+    } catch (err) { toast.error(err.response?.data?.error || 'Грешка') }
   }
 
-  useEffect(() => { fetchDeliveries() }, [filter])
-
-  const todayDeliveries = deliveries.filter(d => d.scheduled_date === new Date().toISOString().slice(0, 10))
+  const todayDeliveries = deliveries.filter(d => d.scheduled_date === today && d.status !== 'DELIVERED' && d.status !== 'FAILED')
   const pending = deliveries.filter(d => d.status === 'PENDING' || d.status === 'IN_TRANSIT')
 
   return (
@@ -215,6 +237,7 @@ export default function Deliveries() {
           <h1 className="text-2xl font-bold text-white">Доставки</h1>
           <p className="text-muted text-sm mt-1">
             {pending.length} изчакващи · {todayDeliveries.length} за днес
+            {deliveries.length >= 200 && ' · показани първите 200 — стеснете филтъра'}
           </p>
         </div>
         <button className="btn-primary" onClick={() => setNewOpen(true)}>+ Нова доставка</button>
@@ -278,7 +301,7 @@ export default function Deliveries() {
                 <tr key={d.id}>
                   <td>
                     <Link to={`/orders/${d.order_id}`} className="font-mono text-accent hover:underline text-sm">
-                      {d.order_number}
+                      {orderNo(d)}
                     </Link>
                   </td>
                   <td>
@@ -286,9 +309,10 @@ export default function Deliveries() {
                     {d.client_phone && <p className="text-muted text-xs">{d.client_phone}</p>}
                   </td>
                   <td><StatusBadge status={d.status} /></td>
-                  <td className={`text-sm ${d.scheduled_date === new Date().toISOString().slice(0,10) ? 'text-orange-400 font-medium' : 'text-gray-300'}`}>
+                  <td className={`text-sm whitespace-nowrap ${d.scheduled_date === today ? 'text-orange-400 font-medium'
+                    : d.scheduled_date && d.scheduled_date < today && ['PENDING', 'IN_TRANSIT'].includes(d.status) ? 'text-danger' : 'text-gray-300'}`}>
                     {fmt(d.scheduled_date)}
-                    {d.scheduled_date === new Date().toISOString().slice(0,10) && <span className="ml-1 text-xs">(днес)</span>}
+                    {d.scheduled_date === today && <span className="ml-1 text-xs">(днес)</span>}
                   </td>
                   <td className="text-muted">{d.driver_name || '—'}</td>
                   <td className="text-muted text-xs max-w-[160px] truncate">{d.address || '—'}</td>
@@ -297,10 +321,7 @@ export default function Deliveries() {
                       <button className="btn-ghost text-xs py-1 px-2" onClick={() => setEditDel(d)}>✏️ Обнови</button>
                       {d.status === 'PENDING' && (
                         <button className="btn-ghost text-xs py-1 px-2 text-orange-400"
-                          onClick={async () => {
-                            await api.patch(`/deliveries/${d.id}`, { status: 'IN_TRANSIT' })
-                            fetchDeliveries()
-                          }}>В движение</button>
+                          onClick={() => setStatus(d, 'IN_TRANSIT')}>В движение</button>
                       )}
                       {d.status === 'IN_TRANSIT' && (
                         <button className="btn-ghost text-xs py-1 px-2 text-green-400"

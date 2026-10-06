@@ -1,8 +1,18 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { format, parseISO } from 'date-fns'
+import { format } from 'date-fns'
 import { bg } from 'date-fns/locale'
 import axios from 'axios'
+import { TYPE_LABELS, orderNo, dateBg } from '../utils/labels'
+
+// Customer-facing steps of an order
+const FLOW = [
+  { status: 'НОВА', label: 'Приета' },
+  { status: 'МАТЕРИАЛИ', label: 'Подготовка на материали' },
+  { status: 'ПРОИЗВОДСТВО', label: 'В производство' },
+  { status: 'ГОТОВА', label: 'Готова' },
+  { status: 'ДОСТАВЕНА', label: 'Предадена' },
+]
 
 const STATUS_LABELS = {
   'НОВА':'Нова','МАТЕРИАЛИ':'Подготовка на материали','ПРОИЗВОДСТВО':'В производство',
@@ -45,8 +55,12 @@ export default function TrackOrder() {
     </div>
   )
 
-  const doneStages = order.stages?.filter(s => s.status === 'ГОТОВ').length || 0
-  const totalStages = order.stages?.length || 0
+  // Skipped stages and empty placeholder rows are not shown to the customer
+  const stages = (order.stages || []).filter(s => s && s.stage_name && s.status !== 'ПРОПУСНАТ')
+  const doneStages = stages.filter(s => s.status === 'ГОТОВ').length
+  const totalStages = stages.length
+  const flowIdx = FLOW.findIndex(f => f.status === order.status)
+  const cancelled = order.status === 'ОТКАЗАНА'
   const progress = totalStages > 0 ? Math.round((doneStages / totalStages) * 100) : 0
 
   return (
@@ -65,8 +79,11 @@ export default function TrackOrder() {
         <div className="card mb-4">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-white">Поръчка #{order.order_number}</h1>
-              <p className="text-muted text-sm mt-0.5">{order.client_name} · {order.order_type}</p>
+              <h1 className="text-2xl font-bold text-white">Поръчка {orderNo(order)}</h1>
+              <p className="text-muted text-sm mt-0.5">
+                {order.client_name}{order.order_type ? ` · ${TYPE_LABELS[order.order_type] || order.order_type}` : ''}
+              </p>
+              <p className="text-muted text-xs mt-0.5">Приета на {dateBg(order.created_at, 'd MMMM yyyy')}</p>
             </div>
             <span className={`font-semibold text-sm ${STATUS_COLORS[order.status] || 'text-white'}`}>
               {STATUS_LABELS[order.status] || order.status}
@@ -79,12 +96,39 @@ export default function TrackOrder() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <span className="text-muted">Краен срок:</span>
-              <span className="text-white font-medium">{format(parseISO(order.deadline), 'd MMMM yyyy', { locale: bg })}</span>
+              <span className="text-white font-medium">{dateBg(order.deadline, 'd MMMM yyyy')}</span>
             </div>
           )}
 
-          {/* Progress */}
-          {totalStages > 0 && (
+          {/* Status timeline */}
+          {cancelled ? (
+            <p className="text-sm text-red-400 bg-red-500/10 rounded-lg px-3 py-2">Поръчката е отказана. За въпроси се свържете с нас.</p>
+          ) : (
+            <ol className="space-y-2 mb-4">
+              {FLOW.map((f, i) => {
+                const done = i < flowIdx || (i === flowIdx && f.status === 'ДОСТАВЕНА')
+                const current = i === flowIdx && !done
+                return (
+                  <li key={f.status} className="flex items-center gap-3">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border
+                      ${done ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                        : current ? 'bg-accent/20 text-accent border-accent/40' : 'bg-border text-muted border-border'}`}>
+                      {done ? '✓' : i + 1}
+                    </span>
+                    <span className={`text-sm ${done ? 'text-green-400' : current ? 'text-white font-semibold' : 'text-muted'}`}>
+                      {f.label}
+                      {f.status === 'ДОСТАВЕНА' && order.delivered_at && done && (
+                        <span className="text-xs text-muted font-normal"> · {dateBg(order.delivered_at)}</span>
+                      )}
+                    </span>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+
+          {/* Progress in the workshop */}
+          {order.status === 'ПРОИЗВОДСТВО' && totalStages > 0 && (
             <div className="mb-4">
               <div className="flex justify-between text-xs text-muted mb-1.5">
                 <span>Напредък</span>
@@ -97,14 +141,14 @@ export default function TrackOrder() {
           )}
         </div>
 
-        {/* Stages */}
-        {order.stages?.length > 0 && (
+        {/* Stages — only while the order is in the workshop */}
+        {order.status === 'ПРОИЗВОДСТВО' && totalStages > 0 && (
           <div className="card">
             <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">Производствени етапи</h2>
             <div className="space-y-2">
-              {order.stages.map((s, i) => (
+              {stages.map((s, i) => (
                 <div key={i} className="flex items-center gap-3">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border ${STAGE_STATUS_BG[s.status]}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border ${STAGE_STATUS_BG[s.status] || STAGE_STATUS_BG['ЧАКАЩ']}`}>
                     {s.status === 'ГОТОВ' ? '✓' : i + 1}
                   </div>
                   <div className="flex-1 flex items-center justify-between">

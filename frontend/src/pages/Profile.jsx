@@ -12,7 +12,7 @@ const ROLE_LABELS = {
 }
 
 export default function Profile() {
-  const { user, login } = useAuth()
+  const { user, updateUser } = useAuth()
   const [profile, setProfile] = useState(null)
   const [editName, setEditName] = useState(false)
   const [name, setName] = useState('')
@@ -25,6 +25,9 @@ export default function Profile() {
     api.get('/auth/me').then(r => {
       setProfile(r.data)
       setName(r.data.name)
+    }).catch(err => {
+      toast.error(err.response?.data?.error || 'Профилът не може да бъде зареден')
+      if (user) { setProfile(user); setName(user.name) }
     })
   }, [])
 
@@ -32,12 +35,10 @@ export default function Profile() {
     if (!name.trim()) return toast.error('Името не може да е празно')
     setSavingName(true)
     try {
-      await api.patch(`/auth/users/${user.id}`, { name: name.trim() })
-      setProfile(p => ({ ...p, name: name.trim() }))
-      // Update localStorage
-      const stored = JSON.parse(localStorage.getItem('user') || '{}')
-      stored.name = name.trim()
-      localStorage.setItem('user', JSON.stringify(stored))
+      const { data } = await api.patch('/auth/me', { name: name.trim() })
+      const newName = data?.name || name.trim()
+      setProfile(p => ({ ...p, name: newName }))
+      updateUser({ name: newName }) // sidebar / header pick up the new name
       setEditName(false)
       toast.success('Името е обновено')
     } catch (err) {
@@ -62,7 +63,8 @@ export default function Profile() {
       toast.success('Паролата е сменена успешно')
       setPwForm({ current_password: '', new_password: '', confirm: '' })
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Грешна текуща парола')
+      // Wrong current password → 400 with a message (you stay logged in)
+      toast.error(err.response?.data?.error || 'Паролата не беше сменена')
     } finally { setSavingPw(false) }
   }
 

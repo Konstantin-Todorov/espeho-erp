@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import LowStockAlert from './LowStockAlert'
 import NotificationBell from './NotificationBell'
+import QuickCreate from './QuickCreate'
+import Spinner from './ui/Spinner'
 import { useAuth } from '../context/AuthContext'
 
 export default function Layout() {
@@ -37,10 +39,8 @@ export default function Layout() {
           </button>
           <span className="font-bold text-white">ЕСПЕХО ERP</span>
           <div className="flex items-center gap-2">
+            <QuickCreate compact />
             <NotificationBell />
-            <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center text-white text-sm font-bold">
-              {user?.name?.[0] || '?'}
-            </div>
           </div>
         </header>
 
@@ -49,7 +49,10 @@ export default function Layout() {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <Outlet />
+          {/* Inner boundary keeps the menu on screen while a page loads */}
+          <Suspense fallback={<div className="flex items-center justify-center py-24"><Spinner size="lg" /></div>}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

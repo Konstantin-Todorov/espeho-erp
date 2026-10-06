@@ -2,15 +2,67 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
-import { OrderStatusBadge } from '../components/ui/StatusBadge'
+import { OrderStatusBadge, PaymentStatusBadge, CategoryBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
+import Modal from '../components/ui/Modal'
 import toast from 'react-hot-toast'
-import { format, parseISO } from 'date-fns'
-import { bg } from 'date-fns/locale'
+import { SOURCE_LABELS, TYPE_LABELS, orderNo, eur, num, dateBg } from '../utils/labels'
 
-const SOURCE_LABELS = {
-  phone: 'Телефон', email: 'Email', office: 'Офис',
-  website: 'Уебсайт', referral: 'Препоръка', other: 'Друго',
+// Merge duplicate client records (e.g. "АЛЕМАР" and "Алемар ЕООД") into this one
+function MergeModal({ open, onClose, client, onMerged }) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState([])
+  const [picked, setPicked] = useState([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!open) { setQ(''); setPicked([]); return }
+    const first = client.name.split(/[\s.,-]+/).find(w => w.length >= 3) || client.name
+    setQ(first)
+  }, [open])
+  useEffect(() => {
+    if (!open || q.trim().length < 2) { setResults([]); return }
+    const t = setTimeout(() => api.get('/clients', { params: { search: q, limit: 20 } })
+      .then(r => setResults(r.data.data.filter(c => c.id !== client.id))), 250)
+    return () => clearTimeout(t)
+  }, [q, open])
+
+  const toggle = c => setPicked(p => p.some(x => x.id === c.id) ? p.filter(x => x.id !== c.id) : [...p, c])
+  const merge = async () => {
+    setSaving(true)
+    try {
+      const { data } = await api.post(`/clients/${client.id}/merge`, { from_ids: picked.map(p => p.id) })
+      toast.success(`Обединени ${data.merged} клиента · ${data.orders_moved} поръчки преместени`)
+      onMerged(); onClose()
+    } catch (err) { toast.error(err.response?.data?.error || 'Грешка') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Обедини дубликати в „${client.name}“`} size="md">
+      <p className="text-sm text-muted mb-3">Изберете записите, които са същият клиент. Поръчките и офертите им ще се преместят тук, а дубликатите ще се изтрият.</p>
+      <input className="input mb-3" placeholder="Търси…" value={q} onChange={e => setQ(e.target.value)} autoFocus />
+      <div className="max-h-72 overflow-y-auto space-y-1">
+        {results.map(c => {
+          const on = picked.some(x => x.id === c.id)
+          return (
+            <label key={c.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer ${on ? 'bg-accent/10' : 'hover:bg-border'}`}>
+              <input type="checkbox" checked={on} onChange={() => toggle(c)} />
+              <span className="flex-1 text-sm text-white">{c.name}</span>
+              <span className="text-xs text-muted">{c.order_count} поръчки</span>
+            </label>
+          )
+        })}
+        {q.trim().length >= 2 && !results.length && <p className="text-center text-muted text-sm py-4">Няма съвпадения</p>}
+      </div>
+      <div className="flex gap-2 justify-end mt-4">
+        <button className="btn-secondary" onClick={onClose}>Откажи</button>
+        <button className="btn-primary" disabled={!picked.length || saving} onClick={merge}>
+          {saving ? '…' : `Обедини (${picked.length})`}
+        </button>
+      </div>
+    </Modal>
+  )
 }
 
 function InlineEdit({ label, value, onSave, type = 'text', textarea = false }) {
@@ -72,7 +124,7 @@ function InlineEdit({ label, value, onSave, type = 'text', textarea = false }) {
           onClick={start}
         >
           {value || <span className="text-muted italic">—</span>}
-          <svg className="w-3 h-3 text-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+          <svg className="w-3 h-3 text-muted opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0"
             fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -116,7 +168,7 @@ function InlineSelect({ label, value, options, onSave }) {
           onClick={() => { setVal(value || ''); setEditing(true) }}
         >
           {options.find(([v]) => v === value)?.[1] || value || <span className="text-muted italic">—</span>}
-          <svg className="w-3 h-3 text-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+          <svg className="w-3 h-3 text-muted opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0"
             fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -130,10 +182,11 @@ function InlineSelect({ label, value, options, onSave }) {
 export default function ClientDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { isAdmin, isOffice } = useAuth()
+  const { isOffice, canSeePrices } = useAuth()
   const [client, setClient] = useState(null)
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
+  const [mergeOpen, setMergeOpen] = useState(false)
 
   const fetchClient = async () => {
     try {
@@ -165,9 +218,7 @@ export default function ClientDetail() {
   if (loading) return <PageLoader />
   if (!client) return null
 
-  const totalOrders = orders.length
-  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.sale_price || 0), 0)
-  const avgValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
+  const stats = client.stats || {}
 
   return (
     <div>
@@ -175,20 +226,25 @@ export default function ClientDetail() {
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
           <Link to="/clients" className="text-muted hover:text-white text-sm">← Клиенти</Link>
-          <h1 className="text-2xl font-bold text-white mt-1">{client.name}</h1>
+          <div className="mt-1">
+            {isOffice
+              ? <div className="text-2xl font-bold [&_p]:text-2xl [&_p]:font-bold"><InlineEdit label="" value={client.name} onSave={v => patchField('name', v)} /></div>
+              : <h1 className="text-2xl font-bold text-white">{client.name}</h1>}
+          </div>
           <p className="text-muted text-sm mt-0.5">
             {client.city && `${client.city} · `}
-            {SOURCE_LABELS[client.source] || client.source}
+            {client.phone && <a href={`tel:${client.phone}`} className="hover:text-accent">{client.phone}</a>}
             {!client.active && <span className="ml-2 badge bg-red-500/20 text-red-400">Неактивен</span>}
           </p>
         </div>
         {isOffice && (
-          <button
-            className="btn-secondary text-sm"
-            onClick={() => patchField('active', !client.active)}
-          >
-            {client.active ? 'Деактивирай' : 'Активирай'}
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button className="btn-primary" onClick={() => navigate(`/orders?new=1&client=${client.id}`)}>+ Нова поръчка</button>
+            <button className="btn-secondary text-sm" onClick={() => setMergeOpen(true)} title="Обедини с дублиран запис на същия клиент">Обедини дубликати</button>
+            <button className="btn-secondary text-sm" onClick={() => patchField('active', !client.active)}>
+              {client.active ? 'Деактивирай' : 'Активирай'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -210,7 +266,7 @@ export default function ClientDetail() {
               <InlineEdit label="МОЛ" value={client.mol}
                 onSave={v => patchField('mol', v)} />
               <InlineSelect
-                label="Канал"
+                label="Откъде научи за нас"
                 value={client.source}
                 options={Object.entries(SOURCE_LABELS)}
                 onSave={v => patchField('source', v)}
@@ -228,16 +284,23 @@ export default function ClientDetail() {
 
           {/* Orders table */}
           <div>
-            <h2 className="text-lg font-semibold text-white mb-3">История на поръчките</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-white">История на поръчките</h2>
+              {stats.total_orders > orders.length && (
+                <Link to={`/orders?tab=all&q=${encodeURIComponent(client.name)}`} className="text-xs text-accent hover:underline">
+                  Всички {stats.total_orders} →
+                </Link>
+              )}
+            </div>
             <div className="table-container">
               <table>
                 <thead>
                   <tr>
-                    <th>#</th>
+                    <th>Номер</th>
                     <th>Статус</th>
-                    <th>Тип</th>
-                    <th>Краен срок</th>
-                    <th>Цена</th>
+                    <th className="hidden md:table-cell">Вид</th>
+                    <th>Срок</th>
+                    {canSeePrices && <th className="text-right">Сума</th>}
                     <th>Дата</th>
                   </tr>
                 </thead>
@@ -251,20 +314,20 @@ export default function ClientDetail() {
                     <tr key={o.id} className="cursor-pointer"
                       onClick={() => navigate(`/orders/${o.id}`)}>
                       <td>
-                        <span className="font-bold text-accent">#{o.order_number}</span>
+                        <span className="font-bold text-accent">{orderNo(o)}</span>
                         {o.is_urgent && <span className="ml-1 text-danger text-xs">●</span>}
                       </td>
-                      <td><OrderStatusBadge status={o.status} /></td>
-                      <td><span className="text-xs text-muted">{o.order_type}</span></td>
-                      <td className="text-muted text-sm">
-                        {o.deadline ? format(parseISO(o.deadline), 'd MMM yyyy', { locale: bg }) : '—'}
+                      <td>
+                        <div className="flex flex-wrap gap-1">
+                          <OrderStatusBadge status={o.status} />
+                          <CategoryBadge category={o.order_category} />
+                          {canSeePrices && o.payment_status !== 'платена' && o.order_category === 'нормална' && +o.sale_price > 0 && <PaymentStatusBadge status={o.payment_status} />}
+                        </div>
                       </td>
-                      <td className="text-muted">
-                        {o.sale_price ? `${Number(o.sale_price).toLocaleString()} €` : '—'}
-                      </td>
-                      <td className="text-muted text-xs">
-                        {format(parseISO(o.created_at), 'd MMM yyyy', { locale: bg })}
-                      </td>
+                      <td className="hidden md:table-cell"><span className="text-xs text-muted">{TYPE_LABELS[o.order_type] || o.order_type}</span></td>
+                      <td className="text-muted text-sm">{dateBg(o.deadline)}</td>
+                      {canSeePrices && <td className="text-right text-gray-200">{eur(o.sale_price)}</td>}
+                      <td className="text-muted text-xs">{dateBg(o.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -280,23 +343,26 @@ export default function ClientDetail() {
             <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Статистика</h3>
             <div className="space-y-4">
               <div>
-                <p className="text-muted text-xs uppercase tracking-wide">Общо поръчки</p>
-                <p className="text-2xl font-bold text-white mt-0.5">{totalOrders}</p>
+                <p className="text-muted text-xs uppercase tracking-wide">Поръчки</p>
+                <p className="text-2xl font-bold text-white mt-0.5">{num(stats.total_orders, 0)}</p>
+                {stats.active_orders > 0 && <p className="text-xs text-orange-400">{stats.active_orders} активни</p>}
               </div>
-              {isAdmin && (
+              {canSeePrices && (
                 <>
                   <div>
-                    <p className="text-muted text-xs uppercase tracking-wide">Общ приход</p>
-                    <p className="text-2xl font-bold text-green-400 mt-0.5">
-                      {totalRevenue.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} €
-                    </p>
+                    <p className="text-muted text-xs uppercase tracking-wide">Оборот (с ДДС)</p>
+                    <p className="text-2xl font-bold text-green-400 mt-0.5">{eur(stats.total_revenue, { dash: false })}</p>
                   </div>
                   <div>
                     <p className="text-muted text-xs uppercase tracking-wide">Средна поръчка</p>
-                    <p className="text-xl font-bold text-white mt-0.5">
-                      {avgValue.toLocaleString('bg-BG', { minimumFractionDigits: 2 })} €
-                    </p>
+                    <p className="text-xl font-bold text-white mt-0.5">{eur(stats.avg_order_value, { dash: false })}</p>
                   </div>
+                  {+stats.unpaid_amount > 0 && (
+                    <div>
+                      <p className="text-muted text-xs uppercase tracking-wide">Дължи</p>
+                      <p className="text-xl font-bold text-danger mt-0.5">{eur(stats.unpaid_amount)}</p>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -319,19 +385,22 @@ export default function ClientDetail() {
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-muted">Канал</span>
+                <span className="text-muted">Откъде</span>
                 <span className="text-white">{SOURCE_LABELS[client.source] || client.source}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Клиент от</span>
-                <span className="text-muted text-xs">
-                  {client.created_at ? format(parseISO(client.created_at), 'd MMM yyyy', { locale: bg }) : '—'}
-                </span>
+                <span className="text-muted">Първа поръчка</span>
+                <span className="text-muted text-xs">{dateBg(stats.first_order_at || client.created_at)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Последна поръчка</span>
+                <span className="text-muted text-xs">{dateBg(stats.last_order_at)}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
+      {mergeOpen && <MergeModal open={mergeOpen} onClose={() => setMergeOpen(false)} client={client} onMerged={fetchClient} />}
     </div>
   )
 }

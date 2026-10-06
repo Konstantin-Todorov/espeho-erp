@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
+import OrderPicker from '../components/ui/OrderPicker'
+import { orderNo } from '../utils/labels'
 import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
 import { bg } from 'date-fns/locale'
@@ -12,6 +15,10 @@ const CAT_LABELS  = {
   стъкло:'Стъкло', дистанционна_рамка:'Дист. рамка', уплътнител:'Уплътнител',
   консуматив:'Консуматив', химия:'Химия', инструмент:'Инструмент', друго:'Друго',
 }
+const TABS = ['stock', 'low-stock', 'movements', 'locations']
+// Low-stock threshold lives on each stock row; the material form shows the highest one
+const materialThreshold = m => Math.max(0, ...(m?.stock_by_location || []).map(s => Number(s.min_threshold) || 0))
+
 const CAT_COLORS = {
   стъкло:'bg-blue-500/20 text-blue-400', дистанционна_рамка:'bg-yellow-500/20 text-yellow-400',
   уплътнител:'bg-purple-500/20 text-purple-400', консуматив:'bg-orange-500/20 text-orange-400',
@@ -93,20 +100,17 @@ function ReceiveModal({ open, onClose, onDone, materials, locations, preselect }
 function IssueModal({ open, onClose, onDone, materials, locations, preselect }) {
   const empty = { material_id:'', location_id:'', order_id:'', quantity:'', notes:'' }
   const [form, setForm] = useState(empty)
-  const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (open) {
-      setForm({ ...empty, material_id: preselect?.material_id || '', location_id: preselect?.location_id || '' })
-      api.get('/orders?status=ПРОИЗВОДСТВО&limit=100').then(r => setOrders(r.data.data)).catch(() => {})
-    }
+    if (open) setForm({ ...empty, material_id: preselect?.material_id || '', location_id: preselect?.location_id || '' })
   }, [open, preselect])
 
   const mat = materials.find(m => m.id === form.material_id)
 
   const handleSubmit = async e => {
     e.preventDefault()
+    if (!form.order_id) return toast.error('Изберете поръчка')
     setLoading(true)
     try {
       await api.post('/warehouse/issue', { ...form, quantity: +form.quantity })
@@ -137,11 +141,8 @@ function IssueModal({ open, onClose, onDone, materials, locations, preselect }) 
         </div>
         <div>
           <label className="label">За поръчка *</label>
-          <select className="select" required value={form.order_id} onChange={e => f('order_id', e.target.value)}>
-            <option value="">— Изберете поръчка</option>
-            {orders.map(o => <option key={o.id} value={o.id}>#{o.order_number} — {o.client_name}</option>)}
-          </select>
-          {orders.length === 0 && <p className="text-xs text-muted mt-1">Само поръчки в статус ПРОИЗВОДСТВО</p>}
+          <OrderPicker value={form.order_id} onChange={o => f('order_id', o?.id || '')} />
+          <p className="text-xs text-muted mt-1">Търсете по № или клиент — само активни поръчки</p>
         </div>
         <div>
           <label className="label">Количество * {mat && `(${mat.unit})`}</label>
@@ -164,7 +165,7 @@ function IssueModal({ open, onClose, onDone, materials, locations, preselect }) 
 }
 
 // ─── Material Form (Add/Edit) ─────────────────────────────────────────────────
-function MaterialFormModal({ open, onClose, material, onDone }) {
+function MaterialFormModal({ open, onClose, material, onDone, showPrices }) {
   const isEdit = !!material
   const empty = { name:'', code:'', category:'стъкло', unit:'м²', price_per_unit:'', min_threshold:'', description:'' }
   const [form, setForm] = useState(empty)
@@ -175,7 +176,7 @@ function MaterialFormModal({ open, onClose, material, onDone }) {
       name: material.name || '', code: material.code || '',
       category: material.category || 'стъкло', unit: material.unit || 'м²',
       price_per_unit: material.price_per_unit || '',
-      min_threshold: material.min_threshold || '',
+      min_threshold: materialThreshold(material) || '',
       description: material.description || '',
     } : empty)
   }, [open, material])
@@ -184,7 +185,13 @@ function MaterialFormModal({ open, onClose, material, onDone }) {
     e.preventDefault()
     setLoading(true)
     try {
-      const payload = { ...form, price_per_unit: +form.price_per_unit||0, min_threshold: +form.min_threshold||0 }
+      const payload = {
+        ...form,
+        price_per_unit: +form.price_per_unit || 0,
+        // empty = leave the current thresholds alone
+        min_threshold: form.min_threshold === '' ? undefined : +form.min_threshold,
+      }
+      if (!showPrices) delete payload.price_per_unit
       if (isEdit) await api.patch(`/warehouse/materials/${material.id}`, payload)
       else await api.post('/warehouse/materials', payload)
       toast.success(isEdit ? 'Материалът е обновен' : 'Материалът е добавен')
@@ -225,16 +232,18 @@ function MaterialFormModal({ open, onClose, material, onDone }) {
             </div>
             <input className="input" required placeholder="или напишете..." value={form.unit} onChange={e => f('unit', e.target.value)} />
           </div>
-          <div>
-            <label className="label">Цена / единица (€)</label>
-            <input type="number" className="input" min="0" step="0.0001" placeholder="0.0000"
-              value={form.price_per_unit} onChange={e => f('price_per_unit', e.target.value)} />
-          </div>
+          {showPrices && (
+            <div>
+              <label className="label">Цена / единица (€)</label>
+              <input type="number" className="input" min="0" step="0.0001" placeholder="0.0000"
+                value={form.price_per_unit} onChange={e => f('price_per_unit', e.target.value)} />
+            </div>
+          )}
           <div className="col-span-2">
             <label className="label">Минимална наличност (за предупреждение)</label>
             <input type="number" className="input" min="0" step="0.01" placeholder="напр. 10"
               value={form.min_threshold} onChange={e => f('min_threshold', e.target.value)} />
-            <p className="text-xs text-muted mt-1">При спадане под тази стойност системата ще покаже предупреждение</p>
+            <p className="text-xs text-muted mt-1">При спадане под тази стойност (във всяка локация) системата показва предупреждение. Празно = без промяна.</p>
           </div>
         </div>
         <div>
@@ -300,7 +309,7 @@ function LocationFormModal({ open, onClose, location, onDone }) {
 }
 
 // ─── Material Detail Modal ────────────────────────────────────────────────────
-function MaterialDetailModal({ open, onClose, material, locations, onEdit, onReceive, onIssue, onRefresh, isAdmin, isWarehouse }) {
+function MaterialDetailModal({ open, onClose, material, locations, onEdit, onReceive, onIssue, canManage, canIssue, showPrices }) {
   const [movements, setMovements] = useState([])
   const [loadingMov, setLoadingMov] = useState(false)
 
@@ -316,7 +325,8 @@ function MaterialDetailModal({ open, onClose, material, locations, onEdit, onRec
   if (!material) return null
 
   const totalQty = Number(material.total_qty || 0)
-  const isLow = material.stock_by_location?.some(s => s.below_threshold) || (material.min_threshold > 0 && totalQty <= material.min_threshold)
+  const threshold = materialThreshold(material)
+  const isLow = material.stock_by_location?.some(s => s.below_threshold)
 
   return (
     <Modal open={open} onClose={onClose} title={material.name} size="lg">
@@ -326,9 +336,9 @@ function MaterialDetailModal({ open, onClose, material, locations, onEdit, onRec
           {[
             { label: 'Категория', val: CAT_LABELS[material.category] || material.category },
             { label: 'Мерна единица', val: material.unit },
-            { label: 'Цена / единица', val: `${Number(material.price_per_unit||0).toFixed(4)} €` },
+            showPrices && { label: 'Цена / единица', val: `${Number(material.price_per_unit||0).toFixed(4)} €` },
             { label: 'Код', val: material.code || '—' },
-          ].map(item => (
+          ].filter(Boolean).map(item => (
             <div key={item.label} className="bg-surface/50 border border-border rounded-xl px-3 py-2">
               <p className="text-xs text-muted uppercase tracking-wide">{item.label}</p>
               <p className="font-medium text-white mt-0.5">{item.val}</p>
@@ -365,8 +375,8 @@ function MaterialDetailModal({ open, onClose, material, locations, onEdit, onRec
               })}
             </div>
           )}
-          {material.min_threshold > 0 && (
-            <p className="text-xs text-muted mt-2">Минимален праг: {material.min_threshold} {material.unit}</p>
+          {threshold > 0 && (
+            <p className="text-xs text-muted mt-2">Минимален праг: {threshold} {material.unit}</p>
           )}
         </div>
 
@@ -388,7 +398,7 @@ function MaterialDetailModal({ open, onClose, material, locations, onEdit, onRec
                   <span className={`text-xs px-1.5 py-0.5 rounded-full ${m.movement_type==='ПОЛУЧЕНО' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                     {m.movement_type==='ПОЛУЧЕНО' ? 'Приход' : 'Изписване'}
                   </span>
-                  <span className="text-xs text-muted flex-1">{m.order_number ? `Поръчка #${m.order_number}` : ''}{m.worker_name ? ` · ${m.worker_name}` : ''}</span>
+                  <span className="text-xs text-muted flex-1">{m.order_number ? `Поръчка ${orderNo(m)}` : ''}{m.worker_name ? ` · ${m.worker_name}` : ''}</span>
                   <span className="text-xs text-muted">{format(parseISO(m.created_at), 'd MMM HH:mm', { locale: bg })}</span>
                 </div>
               ))}
@@ -398,15 +408,17 @@ function MaterialDetailModal({ open, onClose, material, locations, onEdit, onRec
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-          {(isAdmin || isWarehouse) && (
+          {canManage && (
             <button className="btn-primary" onClick={() => { onClose(); onReceive({ material_id: material.id }) }}>
               📥 Добави наличност
             </button>
           )}
-          <button className="btn-secondary" onClick={() => { onClose(); onIssue({ material_id: material.id }) }}>
-            📤 Изпиши към поръчка
-          </button>
-          {(isAdmin || isWarehouse) && (
+          {canIssue && (
+            <button className="btn-secondary" onClick={() => { onClose(); onIssue({ material_id: material.id }) }}>
+              📤 Изпиши към поръчка
+            </button>
+          )}
+          {canManage && (
             <button className="btn-secondary ml-auto" onClick={() => { onClose(); onEdit(material) }}>
               ✏ Редактирай
             </button>
@@ -419,13 +431,18 @@ function MaterialDetailModal({ open, onClose, material, locations, onEdit, onRec
 
 // ─── Main Warehouse Page ──────────────────────────────────────────────────────
 export default function Warehouse() {
-  const { isAdmin, isWarehouse } = useAuth()
+  const { user, isAdmin, isWarehouse, isOffice, isProduction } = useAuth()
+  const canManage = isAdmin || isWarehouse                       // receive, materials, locations
+  const canIssue = isOffice || isWarehouse || isProduction        // issue to an order
+  const showPrices = user?.role !== 'production'
+  const [searchParams, setSearchParams] = useSearchParams()
   const [materials, setMaterials]   = useState([])
   const [locations, setLocations]   = useState([])
   const [movements, setMovements]   = useState([])
   const [lowStock, setLowStock]     = useState([])
   const [loading, setLoading]       = useState(true)
-  const [activeTab, setActiveTab]   = useState('stock')
+  const urlTab = searchParams.get('tab')
+  const [activeTab, setActiveTab]   = useState(TABS.includes(urlTab) ? urlTab : 'stock')
 
   // modals
   const [receivePreselect, setReceivePreselect] = useState(null)
@@ -442,7 +459,7 @@ export default function Warehouse() {
     setLoading(true)
     try {
       const [matRes, locRes, movRes, lowRes] = await Promise.all([
-        api.get('/warehouse/materials'),
+        api.get('/warehouse/materials?limit=500'),
         api.get('/warehouse/locations'),
         api.get('/warehouse/movements?limit=50'),
         api.get('/warehouse/low-stock'),
@@ -451,10 +468,36 @@ export default function Warehouse() {
       setLocations(locRes.data)
       setMovements(movRes.data)
       setLowStock(lowRes.data)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Складът не може да бъде зареден')
     } finally { setLoading(false) }
   }
 
   useEffect(() => { fetchAll() }, [])
+
+  // ?tab=low-stock / ?tab=movements (links from the alert bar and dashboard)
+  useEffect(() => { if (TABS.includes(urlTab)) setActiveTab(urlTab) }, [urlTab])
+
+  // Global "+ Нов": ?new=receive → goods receipt, ?new=material → new material
+  const newParam = searchParams.get('new')
+  useEffect(() => {
+    const n = newParam
+    if (!n) return
+    if (n === 'receive' && canManage) setReceivePreselect({})
+    if (n === 'material' && canManage) setMatFormTarget(null)
+    const next = new URLSearchParams(searchParams)
+    next.delete('new')
+    setSearchParams(next, { replace: true })
+  }, [newParam])
+
+  const selectTab = id => {
+    setActiveTab(id)
+    if (searchParams.get('tab')) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('tab')
+      setSearchParams(next, { replace: true })
+    }
+  }
 
   const filteredMaterials = materials.filter(m => {
     if (category && m.category !== category) return false
@@ -466,6 +509,7 @@ export default function Warehouse() {
 
   const tabs = [
     { id: 'stock',     label: '📦 Наличности',  count: materials.length },
+    { id: 'low-stock', label: '⚠ Под минимум',   count: lowStock.length },
     { id: 'movements', label: '↕ Движения',      count: null },
     { id: 'locations', label: '📍 Локации',       count: locations.length },
   ]
@@ -481,56 +525,69 @@ export default function Warehouse() {
             {lowStock.length > 0 && <span className="text-yellow-400"> · {lowStock.length} под минимум</span>}
           </p>
         </div>
-        {(isAdmin || isWarehouse) && (
+        {(canManage || canIssue) && (
           <div className="flex gap-2 flex-wrap">
-            <button className="btn-primary" onClick={() => setReceivePreselect({})}>
-              📥 Приход
-            </button>
-            <button className="btn-secondary" onClick={() => setIssuePreselect({})}>
-              📤 Изписване
-            </button>
+            {canManage && (
+              <button className="btn-primary" onClick={() => setReceivePreselect({})}>
+                📥 Приход
+              </button>
+            )}
+            {canIssue && (
+              <button className="btn-secondary" onClick={() => setIssuePreselect({})}>
+                📤 Изписване
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Low stock alert */}
-      {lowStock.length > 0 && (
-        <div className="card border-yellow-500/30 bg-yellow-500/5 mb-5">
-          <p className="text-yellow-400 font-semibold mb-3">⚠ Материали под минималната наличност</p>
-          <div className="space-y-1.5">
-            {lowStock.map((s, i) => (
-              <div key={i} className="flex items-center justify-between text-sm">
-                <button className="text-gray-300 hover:text-accent hover:underline text-left"
-                  onClick={() => setDetailMat(materials.find(m => m.name === s.name))}>
-                  {s.name}
-                </button>
-                <div className="flex items-center gap-4">
-                  <span className="text-muted text-xs">{s.location_name}</span>
-                  <span className="text-yellow-400 font-medium">{Number(s.quantity).toFixed(2)} {s.unit}</span>
-                  <span className="text-muted text-xs">мин: {Number(s.min_threshold).toFixed(2)}</span>
-                  {(isAdmin || isWarehouse) && (
-                    <button className="text-xs text-accent hover:underline" onClick={() => setReceivePreselect({ material_id: materials.find(m=>m.name===s.name)?.id })}>
-                      + Добави
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Tabs */}
       <div className="flex border-b border-border gap-1 mb-5">
         {tabs.map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)}
+          <button key={t.id} onClick={() => selectTab(t.id)}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap
               ${activeTab === t.id ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-white'}`}>
             {t.label}
-            {t.count !== null && <span className="ml-1.5 text-xs text-muted">({t.count})</span>}
+            {t.count !== null && <span className={`ml-1.5 text-xs ${t.id === 'low-stock' && t.count ? 'text-yellow-400' : 'text-muted'}`}>({t.count})</span>}
           </button>
         ))}
       </div>
+
+      {/* ── LOW STOCK TAB ── */}
+      {activeTab === 'low-stock' && (
+        lowStock.length === 0 ? (
+          <div className="card text-center py-12">
+            <p className="text-2xl mb-3">✓</p>
+            <p className="text-white font-semibold mb-1">Всички материали са над минимума</p>
+            <p className="text-muted text-sm">Минималната наличност се задава от „Редактирай“ на материала.</p>
+          </div>
+        ) : (
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr><th>Материал</th><th>Локация</th><th className="text-right">Наличност</th><th className="text-right">Минимум</th><th></th></tr>
+              </thead>
+              <tbody>
+                {lowStock.map((s, i) => (
+                  <tr key={`${s.id}-${i}`} className="cursor-pointer" onClick={() => setDetailMat(materials.find(m => m.id === s.id) || null)}>
+                    <td className="font-medium text-white">{s.name}</td>
+                    <td className="text-muted">{s.location_name}</td>
+                    <td className="text-right text-yellow-400 font-semibold">{Number(s.quantity).toFixed(2)} {s.unit}</td>
+                    <td className="text-right text-muted">{Number(s.min_threshold).toFixed(2)} {s.unit}</td>
+                    <td className="text-right" onClick={e => e.stopPropagation()}>
+                      {canManage && (
+                        <button className="text-xs text-accent hover:underline" onClick={() => setReceivePreselect({ material_id: s.id })}>
+                          📥 Добави
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
 
       {/* ── STOCK TAB ── */}
       {activeTab === 'stock' && (
@@ -544,7 +601,7 @@ export default function Warehouse() {
                 {CATEGORIES.map(c => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
               </select>
             </div>
-            {(isAdmin || isWarehouse) && (
+            {canManage && (
               <button className="btn-secondary text-sm" onClick={() => setMatFormTarget(null)}>
                 + Нов материал
               </button>
@@ -556,13 +613,13 @@ export default function Warehouse() {
               <thead>
                 <tr>
                   <th>Материал</th><th>Категория</th><th>Локации / наличност</th>
-                  <th className="text-right">Общо</th><th className="text-right">Цена/ед.</th>
+                  <th className="text-right">Общо</th>{showPrices && <th className="text-right">Цена/ед.</th>}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {filteredMaterials.length === 0 && (
-                  <tr><td colSpan={6} className="text-center py-10 text-muted">
+                  <tr><td colSpan={showPrices ? 6 : 5} className="text-center py-10 text-muted">
                     {search || category ? 'Няма намерени материали' : 'Няма добавени материали'}
                   </td></tr>
                 )}
@@ -596,15 +653,17 @@ export default function Warehouse() {
                       <td className={`text-right font-semibold ${isLow ? 'text-yellow-400' : 'text-white'}`}>
                         {totalQty.toFixed(2)} <span className="text-xs text-muted">{m.unit}</span>
                       </td>
-                      <td className="text-right text-muted text-sm">{Number(m.price_per_unit||0).toFixed(4)} €</td>
+                      {showPrices && <td className="text-right text-muted text-sm">{Number(m.price_per_unit||0).toFixed(4)} €</td>}
                       <td onClick={e => e.stopPropagation()}>
                         <div className="flex gap-1 justify-end">
-                          {(isAdmin || isWarehouse) && (
-                            <button className="text-xs text-accent hover:underline px-2 py-1"
+                          {canManage && (
+                            <button className="text-xs text-accent hover:underline px-2 py-1" title="Приход"
                               onClick={() => setReceivePreselect({ material_id: m.id })}>📥</button>
                           )}
-                          <button className="text-xs text-muted hover:text-white px-2 py-1"
-                            onClick={() => setIssuePreselect({ material_id: m.id })}>📤</button>
+                          {canIssue && (
+                            <button className="text-xs text-muted hover:text-white px-2 py-1" title="Изпиши към поръчка"
+                              onClick={() => setIssuePreselect({ material_id: m.id })}>📤</button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -639,7 +698,7 @@ export default function Warehouse() {
                     {m.movement_type==='ПОЛУЧЕНО' ? '+' : '−'}{Math.abs(m.quantity).toFixed(2)} {m.unit}
                   </td>
                   <td className="text-muted text-sm">{m.location_name || '—'}</td>
-                  <td className="text-muted text-sm">{m.order_number ? `#${m.order_number}` : '—'}</td>
+                  <td className="text-muted text-sm">{m.order_number ? orderNo(m) : '—'}</td>
                   <td className="text-muted">{m.worker_name || '—'}</td>
                   <td className="text-muted text-xs whitespace-nowrap">{format(parseISO(m.created_at), 'd MMM yyyy · HH:mm', { locale: bg })}</td>
                 </tr>
@@ -654,7 +713,7 @@ export default function Warehouse() {
         <>
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted">Зони и рафтове в склада</p>
-            {(isAdmin || isWarehouse) && (
+            {canManage && (
               <button className="btn-secondary text-sm" onClick={() => setLocFormTarget(null)}>
                 + Нова локация
               </button>
@@ -665,7 +724,7 @@ export default function Warehouse() {
               <p className="text-2xl mb-3">📍</p>
               <p className="text-white font-semibold mb-1">Няма добавени локации</p>
               <p className="text-muted text-sm mb-4">Добавете зони и рафтове за организиране на склада</p>
-              {(isAdmin || isWarehouse) && (
+              {canManage && (
                 <button className="btn-primary mx-auto" onClick={() => setLocFormTarget(null)}>+ Добави локация</button>
               )}
             </div>
@@ -680,7 +739,7 @@ export default function Warehouse() {
                         <p className="font-semibold text-white">📍 {loc.name}</p>
                         {loc.description && <p className="text-xs text-muted mt-0.5">{loc.description}</p>}
                       </div>
-                      {(isAdmin || isWarehouse) && (
+                      {canManage && (
                         <button className="text-xs text-muted hover:text-accent"
                           onClick={() => setLocFormTarget(loc)}>✏ Редактирай</button>
                       )}
@@ -721,7 +780,7 @@ export default function Warehouse() {
       />
       <MaterialFormModal
         open={matFormTarget !== undefined} onClose={() => setMatFormTarget(undefined)}
-        material={matFormTarget || null} onDone={fetchAll}
+        material={matFormTarget || null} onDone={fetchAll} showPrices={showPrices}
       />
       <LocationFormModal
         open={locFormTarget !== undefined} onClose={() => setLocFormTarget(undefined)}
@@ -733,8 +792,7 @@ export default function Warehouse() {
         onEdit={m => { setDetailMat(null); setMatFormTarget(m) }}
         onReceive={p => setReceivePreselect(p)}
         onIssue={p => setIssuePreselect(p)}
-        onRefresh={fetchAll}
-        isAdmin={isAdmin} isWarehouse={isWarehouse}
+        canManage={canManage} canIssue={canIssue} showPrices={showPrices}
       />
     </div>
   )

@@ -65,7 +65,8 @@ export default function Login() {
             <input
               type="email"
               className="input"
-              placeholder="admin@espeho.com"
+              placeholder="име@espeho.com"
+              autoComplete="username"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
@@ -78,6 +79,7 @@ export default function Login() {
               type="password"
               className="input"
               placeholder="••••••••"
+              autoComplete="current-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required

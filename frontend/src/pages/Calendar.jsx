@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/axios'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, parseISO, addMonths, subMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths } from 'date-fns'
 import { bg } from 'date-fns/locale'
+import toast from 'react-hot-toast'
 import { OrderStatusBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
+import { TYPE_LABELS, orderNo, isOverdue } from '../utils/labels'
 
 const STATUS_DOT = {
   'НОВА':'bg-blue-400','МАТЕРИАЛИ':'bg-yellow-400','ПРОИЗВОДСТВО':'bg-orange-400',
@@ -21,15 +23,20 @@ export default function Calendar() {
     setLoading(true)
     const from = format(startOfMonth(month), 'yyyy-MM-dd')
     const to = format(endOfMonth(month), 'yyyy-MM-dd')
-    api.get(`/orders?from=${from}&to=${to}&limit=200`)
+    api.get('/orders', { params: { deadline_from: from, deadline_to: to, limit: 500 } })
       .then(r => setOrders(r.data.data.filter(o => o.deadline)))
+      .catch(err => toast.error(err.response?.data?.error || 'Грешка при зареждане'))
       .finally(() => setLoading(false))
   }, [month])
 
   const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) })
   const firstDayOfWeek = (startOfMonth(month).getDay() + 6) % 7 // Mon=0
 
-  const ordersForDay = day => orders.filter(o => o.deadline && isSameDay(parseISO(o.deadline), day))
+  // deadline is a plain 'YYYY-MM-DD' (DATE column) — compare as strings, no timezone shifts
+  const ordersForDay = day => {
+    const key = format(day, 'yyyy-MM-dd')
+    return orders.filter(o => String(o.deadline).slice(0, 10) === key)
+  }
   const selectedOrders = selected ? ordersForDay(selected) : []
 
   return (
@@ -64,7 +71,7 @@ export default function Calendar() {
               {days.map(day => {
                 const dayOrders = ordersForDay(day)
                 const isSelected = selected && isSameDay(day, selected)
-                const hasOverdue = dayOrders.some(o => new Date(o.deadline) < new Date() && !['ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА'].includes(o.status))
+                const hasOverdue = dayOrders.some(isOverdue)
                 const hasUrgent = dayOrders.some(o => o.is_urgent)
                 return (
                   <div key={day.toISOString()}
@@ -86,7 +93,7 @@ export default function Calendar() {
                       {dayOrders.slice(0, 2).map(o => (
                         <div key={o.id} className="flex items-center gap-1 min-w-0">
                           <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[o.status] || 'bg-gray-400'}`} />
-                          <span className="text-xs text-gray-400 truncate leading-tight">{o.client_name || `#${o.order_number}`}</span>
+                          <span className="text-xs text-gray-400 truncate leading-tight">{o.client_name || orderNo(o)}</span>
                         </div>
                       ))}
                       {dayOrders.length > 2 && (
@@ -109,19 +116,19 @@ export default function Calendar() {
                 {selectedOrders.length === 0 ? (
                   <p className="text-muted text-sm">Няма поръчки с дедлайн за този ден</p>
                 ) : selectedOrders.map(o => {
-                  const isOverdue = new Date(o.deadline) < new Date() && !['ГОТОВА','ДОСТАВЕНА','ОТКАЗАНА'].includes(o.status)
+                  const overdue = isOverdue(o)
                   return (
                     <Link key={o.id} to={`/orders/${o.id}`}
                       className="block py-2.5 border-b border-border/40 last:border-0 hover:bg-surface/40 -mx-2 px-2 rounded-lg transition-colors">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-white text-sm">#{o.order_number}</span>
+                        <span className="font-semibold text-white text-sm">{orderNo(o)}</span>
                         <OrderStatusBadge status={o.status} />
                       </div>
                       <p className="text-sm text-gray-300 mt-0.5">{o.client_name}</p>
-                      {o.order_type && <p className="text-xs text-muted mt-0.5">{o.order_type}</p>}
+                      {o.order_type && <p className="text-xs text-muted mt-0.5">{TYPE_LABELS[o.order_type] || o.order_type}</p>}
                       <div className="flex gap-2 mt-1">
                         {o.is_urgent && <span className="text-xs text-yellow-400">⚡ Спешна</span>}
-                        {isOverdue && <span className="text-xs text-red-400">⚠ Просрочена</span>}
+                        {overdue && <span className="text-xs text-red-400">⚠ Просрочена</span>}
                       </div>
                     </Link>
                   )

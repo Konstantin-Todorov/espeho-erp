@@ -1,18 +1,24 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/axios'
+import { useAuth } from '../context/AuthContext'
 
 export default function LowStockAlert() {
   const [items, setItems] = useState([])
   const [dismissed, setDismissed] = useState(false)
+  const { user } = useAuth()
+  // Only roles that can open the warehouse page get the banner
+  const canSee = ['admin', 'office', 'warehouse'].includes(user?.role)
 
   useEffect(() => {
+    if (!canSee) return
     api.get('/warehouse/low-stock')
       .then(res => setItems(res.data))
       .catch(() => {})
-  }, [])
+  }, [canSee])
 
-  if (!items.length || dismissed) return null
+  if (!canSee || !items.length || dismissed) return null
+  const materialCount = new Set(items.map(i => i.id)).size
 
   return (
     <div className="bg-yellow-500/10 border-b border-yellow-500/30 px-4 py-2">
@@ -23,7 +29,7 @@ export default function LowStockAlert() {
               d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
           </svg>
           <span>
-            <strong>{items.length} материала</strong> под минималната наличност —{' '}
+            <strong>{materialCount} {materialCount === 1 ? 'материал' : 'материала'}</strong> под минималната наличност —{' '}
             <Link to="/warehouse?tab=low-stock" className="underline hover:text-yellow-300">виж списъка</Link>
           </span>
         </div>

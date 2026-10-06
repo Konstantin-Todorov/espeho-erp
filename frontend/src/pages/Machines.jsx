@@ -118,6 +118,7 @@ function MachineFormModal({ open, onClose, machine, onDone }) {
 
 // ─── Log maintenance ─────────────────────────────────────────────────────────
 function MaintenanceModal({ open, onClose, machine, onDone }) {
+  const { canSeePrices } = useAuth()
   const [form, setForm] = useState(EMPTY_MAINT)
   const [loading, setLoading] = useState(false)
 
@@ -127,7 +128,9 @@ function MaintenanceModal({ open, onClose, machine, onDone }) {
     e.preventDefault()
     setLoading(true)
     try {
-      await api.post(`/machines/${machine?.id}/maintenance`, { ...form, cost: +form.cost||0 })
+      const payload = { ...form, cost: +form.cost || 0 }
+      if (!canSeePrices) delete payload.cost
+      await api.post(`/machines/${machine?.id}/maintenance`, payload)
       toast.success('Поддръжката е записана')
       onDone(); onClose()
     } catch (err) { toast.error(err.response?.data?.error || 'Грешка') }
@@ -150,10 +153,12 @@ function MaintenanceModal({ open, onClose, machine, onDone }) {
             <label className="label">Извършил (техник / фирма)</label>
             <input className="input" placeholder="Иван Петров / Сервиз АД" value={form.performed_by} onChange={e=>f('performed_by',e.target.value)} />
           </div>
-          <div>
-            <label className="label">Цена (€)</label>
-            <input type="number" className="input" min="0" step="0.01" placeholder="0.00" value={form.cost} onChange={e=>f('cost',e.target.value)} />
-          </div>
+          {canSeePrices && (
+            <div>
+              <label className="label">Цена (€)</label>
+              <input type="number" className="input" min="0" step="0.01" placeholder="0.00" value={form.cost} onChange={e=>f('cost',e.target.value)} />
+            </div>
+          )}
           <div>
             <label className="label">Дата на поддръжка</label>
             <input type="date" className="input" value={form.performed_at} onChange={e=>f('performed_at',e.target.value)} />
@@ -182,7 +187,7 @@ function MaintenanceModal({ open, onClose, machine, onDone }) {
 
 // ─── Machine detail modal ────────────────────────────────────────────────────
 function MachineDetailModal({ open, onClose, machineId, onEdit, onDelete, onLogMaint }) {
-  const { isAdmin } = useAuth()
+  const { isAdmin, canSeePrices } = useAuth()
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -211,14 +216,14 @@ function MachineDetailModal({ open, onClose, machineId, onEdit, onDelete, onLogM
               { label: 'Тип', val: machine.type || '—' },
               { label: 'Модел', val: machine.model || '—' },
               { label: 'Сериен номер', val: machine.serial_number || '—' },
-              { label: 'Цена / час', val: `${machine.cost_per_hour} €` },
+              canSeePrices && { label: 'Цена / час', val: `${machine.cost_per_hour ?? 0} €` },
               { label: 'Интервал поддръжка', val: `${machine.service_interval_days} дни` },
               {
                 label: 'Следваща поддръжка',
                 val: machine.next_service_date ? format(parseISO(machine.next_service_date), 'd MMM yyyy', { locale: bg }) : '—',
                 alert: machine.service_overdue,
               },
-            ].map(item => (
+            ].filter(Boolean).map(item => (
               <div key={item.label} className="card py-3 px-4">
                 <p className="text-xs text-muted uppercase tracking-wide mb-1">{item.label}</p>
                 <p className={`font-semibold ${item.alert ? 'text-danger' : 'text-white'}`}>
@@ -254,7 +259,7 @@ function MachineDetailModal({ open, onClose, machineId, onEdit, onDelete, onLogM
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium text-white text-sm">{MAINT_LABELS[log.maintenance_type] || log.maintenance_type}</span>
-                        {log.cost > 0 && <span className="text-xs text-muted flex-shrink-0">{Number(log.cost).toFixed(2)} €</span>}
+                        {canSeePrices && log.cost > 0 && <span className="text-xs text-muted flex-shrink-0">{Number(log.cost).toFixed(2)} €</span>}
                       </div>
                       <p className="text-xs text-gray-400 mt-0.5">{log.notes}</p>
                       <p className="text-xs text-muted mt-1">
@@ -293,6 +298,7 @@ function MachineDetailModal({ open, onClose, machineId, onEdit, onDelete, onLogM
 
 // ─── Machine card ────────────────────────────────────────────────────────────
 function MachineCard({ machine, onClick }) {
+  const { canSeePrices } = useAuth()
   const pct = machine.last_service && machine.next_service_date
     ? (() => {
         const last = new Date(machine.last_service).getTime()
@@ -318,10 +324,12 @@ function MachineCard({ machine, onClick }) {
       </div>
 
       <div className="space-y-1.5 text-sm mb-4">
-        <div className="flex justify-between">
-          <span className="text-muted">Цена/час</span>
-          <span className="text-white font-medium">{machine.cost_per_hour} €</span>
-        </div>
+        {canSeePrices && (
+          <div className="flex justify-between">
+            <span className="text-muted">Цена/час</span>
+            <span className="text-white font-medium">{machine.cost_per_hour ?? 0} €</span>
+          </div>
+        )}
         <div className="flex justify-between">
           <span className="text-muted">Последна поддръжка</span>
           <span className="text-white">

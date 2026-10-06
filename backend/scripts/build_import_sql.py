@@ -7,7 +7,7 @@ Spreadsheet layout (one order = one header row + following rows until the next h
   D ОФИС (client — or a channel word: ОФИС / М-Ж = монтаж / Д-КА = доставка)
   E Стъклопакет (Единичен/Двоен/Троен — inherited by following rows when blank)
   F Видове (glass build-up / service — inherited when blank)   G mm (thickness OR a free-text note)
-  H height mm   I width mm   J БР qty   K М2 billable area (min applied)   L ЛМ perimeter
+  H height mm   I width mm   J БР qty   K М2 billable area of the whole line (min applied per pane)   L ЛМ perimeter
   M М22 billed quantity   N ЦЕНА unit price (с ДДС)   O КРАЙНА ЦЕНА line total (с ДДС)
   U СЕБЕСТОЙНОСТ cost (без ДДС)
 The first product line sits on the header row itself. Dealer orders often carry the whole order's
@@ -147,7 +147,9 @@ for r in rows:
         type=item_type(t), desc=d_text[:2000], note=note[:500] if note and note != d_text else None,
         thickness=mm_num if mm_num and 3 <= mm_num <= 80 else None,
         w=w if w and w > 0 else None, h=h if h and h > 0 else None, qty=qty,
-        area=area, uom=uom, billed=billed_q, price=price, total=round(total or 0, 2), cost=cost))
+        # Column K is the billable area of the whole line (all pieces); the ERP stores it per piece
+        area=round(area / qty, 4) if area else None,
+        uom=uom, billed=billed_q, price=price, total=round(total or 0, 2), cost=cost))
 
 out = []
 for i, o in enumerate(orders):

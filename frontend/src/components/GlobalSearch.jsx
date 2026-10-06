@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
+import { useAuth } from '../context/AuthContext'
+import { orderNo } from '../utils/labels'
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value)
@@ -20,6 +22,8 @@ export default function GlobalSearch() {
   const inputRef = useRef(null)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
+  // Production/warehouse can't open client pages — search orders only
+  const { isOffice } = useAuth()
 
   useEffect(() => {
     if (!debouncedQuery || debouncedQuery.length < 2) {
@@ -29,9 +33,10 @@ export default function GlobalSearch() {
     }
 
     setLoading(true)
+    // Order search also matches the original spreadsheet number (e.g. 326-00160)
     Promise.all([
-      api.get(`/orders?search=${encodeURIComponent(debouncedQuery)}&limit=5`),
-      api.get(`/clients?search=${encodeURIComponent(debouncedQuery)}&limit=5`),
+      api.get('/orders', { params: { search: debouncedQuery, limit: isOffice ? 5 : 8 } }),
+      isOffice ? api.get('/clients', { params: { search: debouncedQuery, limit: 5 } }) : Promise.resolve({ data: { data: [] } }),
     ]).then(([ordersRes, clientsRes]) => {
       setResults({
         orders: ordersRes.data.data || [],
@@ -41,7 +46,7 @@ export default function GlobalSearch() {
     }).catch(() => {
       setResults({ orders: [], clients: [] })
     }).finally(() => setLoading(false))
-  }, [debouncedQuery])
+  }, [debouncedQuery, isOffice])
 
   // Close on outside click
   useEffect(() => {
@@ -79,7 +84,7 @@ export default function GlobalSearch() {
           value={query}
           onChange={e => setQuery(e.target.value)}
           onFocus={() => hasResults && setOpen(true)}
-          placeholder="Търси поръчки, клиенти..."
+          placeholder={isOffice ? 'Търси поръчка (№, 326-…) или клиент…' : 'Търси поръчка по № или клиент…'}
           className="w-full bg-bg border border-border rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-muted focus:outline-none focus:border-accent transition-colors"
         />
         {loading && (
@@ -108,7 +113,7 @@ export default function GlobalSearch() {
                   onClick={() => handleSelect(`/orders/${o.id}`)}
                 >
                   <div>
-                    <span className="text-accent font-bold text-xs">#{o.order_number}</span>
+                    <span className="text-accent font-bold text-xs">{orderNo(o)}</span>
                     <span className="text-white text-xs ml-2">{o.client_name}</span>
                   </div>
                   <span className="text-muted text-xs flex-shrink-0">{o.status}</span>

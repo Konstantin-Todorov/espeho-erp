@@ -3,6 +3,7 @@ import api from '../api/axios'
 import { RoleBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
+import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 
 const ROLES = ['admin','office','production','warehouse']
@@ -16,9 +17,12 @@ export default function Users() {
 
   const fetchUsers = async () => {
     setLoading(true)
-    const { data } = await api.get('/auth/users')
-    setUsers(data)
-    setLoading(false)
+    try {
+      const { data } = await api.get('/auth/users')
+      setUsers(data)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Грешка при зареждане')
+    } finally { setLoading(false) }
   }
 
   useEffect(() => { fetchUsers() }, [])
@@ -65,21 +69,26 @@ export default function Users() {
 }
 
 function UserModal({ open, onClose, user, onSaved }) {
+  const { user: me } = useAuth()
   const isEdit = !!user
+  const isSelf = isEdit && user.id === me?.id
   const [form, setForm] = useState({ name:'', email:'', password:'', role:'production', hourly_rate:'', active:true })
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (user) setForm({ name:user.name, email:user.email, password:'', role:user.role, hourly_rate:user.hourly_rate||'', active:user.active })
     else setForm({ name:'', email:'', password:'', role:'production', hourly_rate:'', active:true })
-  }, [user])
+  }, [open, user])
 
   const handleSubmit = async e => {
     e.preventDefault()
+    if ((!isEdit || form.password) && form.password.length < 6) return toast.error('Паролата трябва да е поне 6 символа')
     setLoading(true)
     try {
       const payload = { ...form, hourly_rate: +form.hourly_rate||0 }
-      if (!isEdit || form.password) { /* include password */ } else delete payload.password
+      if (isEdit && !form.password) delete payload.password
+      // You can't lock yourself out (the server refuses it too)
+      if (isSelf) { delete payload.active; delete payload.role }
       if (isEdit) await api.patch(`/auth/users/${user.id}`, payload)
       else await api.post('/auth/users', payload)
       toast.success(isEdit ? 'Потребителят е обновен' : 'Потребителят е създаден')
@@ -92,7 +101,7 @@ function UserModal({ open, onClose, user, onSaved }) {
     <Modal open={open} onClose={onClose} title={isEdit ? `Редактирай: ${user?.name}` : 'Нов потребител'} size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="label">Пълно ime *</label>
+          <label className="label">Пълно име *</label>
           <input className="input" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} required />
         </div>
         <div>
@@ -102,12 +111,15 @@ function UserModal({ open, onClose, user, onSaved }) {
         <div>
           <label className="label">{isEdit ? 'Нова парола (остави празно)' : 'Парола *'}</label>
           <input type="password" className="input" value={form.password}
-            onChange={e=>setForm(f=>({...f,password:e.target.value}))} required={!isEdit} placeholder={isEdit ? '••••••• (незадължително)' : ''} />
+            onChange={e=>setForm(f=>({...f,password:e.target.value}))} required={!isEdit} minLength={isEdit && !form.password ? undefined : 6}
+            autoComplete="new-password" placeholder={isEdit ? '••••••• (незадължително)' : ''} />
+          <p className="text-xs text-muted mt-1">Поне 6 символа.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Роля *</label>
-            <select className="select" value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))}>
+            <select className="select" value={form.role} disabled={isSelf} title={isSelf ? 'Не можете да смените собствената си роля' : ''}
+              onChange={e=>setForm(f=>({...f,role:e.target.value}))}>
               {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </select>
           </div>
@@ -119,9 +131,10 @@ function UserModal({ open, onClose, user, onSaved }) {
         </div>
         {isEdit && (
           <div className="flex items-center gap-2">
-            <input type="checkbox" id="active" className="w-4 h-4 accent-accent" checked={form.active}
+            <input type="checkbox" id="active" className="w-4 h-4 accent-accent disabled:opacity-50" checked={form.active} disabled={isSelf}
               onChange={e=>setForm(f=>({...f,active:e.target.checked}))} />
             <label htmlFor="active" className="text-sm text-gray-200">Активен потребител</label>
+            {isSelf && <span className="text-xs text-muted">(не можете да деактивирате себе си)</span>}
           </div>
         )}
         <div className="flex gap-3 justify-end">

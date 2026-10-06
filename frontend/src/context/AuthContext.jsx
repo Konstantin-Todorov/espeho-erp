@@ -29,6 +29,15 @@ export function AuthProvider({ children }) {
     return data.user
   }
 
+  // Update the stored user after a profile change (e.g. new display name)
+  const updateUser = patch => {
+    setUser(prev => {
+      const next = { ...prev, ...patch }
+      localStorage.setItem('user', JSON.stringify(next))
+      return next
+    })
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
@@ -39,9 +48,11 @@ export function AuthProvider({ children }) {
   const isOffice = ['admin','office'].includes(user?.role)
   const isProduction = ['admin','production'].includes(user?.role)
   const isWarehouse = ['admin','warehouse'].includes(user?.role)
+  // Prices, costs and margins are for admin and office only (the server enforces the same rule)
+  const canSeePrices = isOffice
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, isAdmin, isOffice, isProduction, isWarehouse }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser, loading, isAdmin, isOffice, isProduction, isWarehouse, canSeePrices }}>
       {children}
     </AuthContext.Provider>
   )

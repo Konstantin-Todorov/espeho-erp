@@ -117,7 +117,7 @@ router.get('/movements', async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT sm.*, m.name AS material_name, m.unit, l.name AS location_name,
-             o.order_number, u.name AS worker_name
+             o.order_number, o.external_ref, u.name AS worker_name
       FROM stock_movements sm
       JOIN materials m ON m.id=sm.material_id
       LEFT JOIN locations l ON l.id=sm.location_id
