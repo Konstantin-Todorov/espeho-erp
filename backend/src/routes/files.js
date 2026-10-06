@@ -34,7 +34,9 @@ const ALLOWED = {
   '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/octet-stream'],
 };
 
-const upload = multer({
+// Staff uploads are capped at 20 MB; large drawings/scans are loaded by an admin (scripts/attach_files.js).
+const STAFF_LIMIT = 20 * 1024 * 1024, ADMIN_LIMIT = 200 * 1024 * 1024;
+const makeUpload = limit => multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
       const dir = path.join(uploadDir, req.params.orderId);
@@ -46,7 +48,7 @@ const upload = multer({
       cb(null, unique + path.extname(file.originalname).toLowerCase());
     },
   }),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  limits: { fileSize: limit },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     const mimes = ALLOWED[ext];
@@ -54,9 +56,12 @@ const upload = multer({
     else cb(new Error('Неразрешен файлов тип (PDF, JPG, PNG, DWG, DXF, XLSX, DOCX)'));
   },
 });
+const staffUpload = makeUpload(STAFF_LIMIT).single('file');
+const adminUpload = makeUpload(ADMIN_LIMIT).single('file');
+const upload = (req, res, next) => (req.user.role === 'admin' ? adminUpload : staffUpload)(req, res, next);
 
 // POST /api/files/:orderId
-router.post('/:orderId', requireOrder, upload.single('file'), async (req, res) => {
+router.post('/:orderId', requireOrder, upload, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Файлът е задължителен' });
   // multer decodes the original name as latin1 — restore UTF-8 so Cyrillic names display correctly
   const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');

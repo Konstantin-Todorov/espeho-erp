@@ -194,6 +194,19 @@ export default function Board() {
         </div>
       </div>
 
+      {active.length === 0 && byCol.debt?.length === 0 && !q && (
+        <div className="card mb-4 flex flex-col md:flex-row md:items-center gap-4 border-accent/30">
+          <div className="flex-1">
+            <p className="font-semibold text-white">Тук минава целият ден на офиса</p>
+            <p className="text-sm text-muted mt-1">
+              Всяка нова поръчка се появява в „Нови“. Бутонът на картата я премества напред: пусни в цеха → готова →
+              предай на клиента (тогава се записва и плащането). Неплатените остават в последната колона, докато се платят.
+            </p>
+          </div>
+          {isOffice && <Link to="/orders?new=1" className="btn-primary whitespace-nowrap">+ Първата поръчка</Link>}
+        </div>
+      )}
+
       <div className={`grid gap-3 flex-1 min-h-0 grid-cols-1 md:grid-cols-2 ${cols.length === 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
         {cols.map((c, idx) => (
           <section key={c.key}
