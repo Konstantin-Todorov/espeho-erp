@@ -5,6 +5,17 @@ import Modal from '../ui/Modal'
 import { FULFILLMENT_LABELS, orderNo, eur } from '../../utils/labels'
 import useOptions from '../../hooks/useOptions'
 
+// One choice of "did the client pay?" — kept outside the dialog so it isn't re-created on every render
+function Option({ active, onSelect, title, sub }) {
+  return (
+    <button type="button" onClick={onSelect} aria-pressed={active}
+      className={`text-left p-3 rounded-xl border transition-colors ${active ? 'border-accent bg-accent/10' : 'border-border hover:border-accent/40'}`}>
+      <p className="text-sm font-medium text-white">{title}</p>
+      {sub && <p className="text-xs text-muted mt-0.5">{sub}</p>}
+    </button>
+  )
+}
+
 // Hand an order over to the client and record the payment in the same step —
 // that is how it happens at the counter, so it should be one click, not two screens.
 // paymentOnly: the order is already handed over — just collect (part of) the money
@@ -38,14 +49,6 @@ export default function HandoverDialog({ order, open, onClose, onDone, paymentOn
     } finally { setSaving(false) }
   }
 
-  const Option = ({ value, title, sub }) => (
-    <button type="button" onClick={() => setMode(value)}
-      className={`text-left p-3 rounded-xl border transition-colors ${mode === value ? 'border-accent bg-accent/10' : 'border-border hover:border-accent/40'}`}>
-      <p className="text-sm font-medium text-white">{title}</p>
-      {sub && <p className="text-xs text-muted mt-0.5">{sub}</p>}
-    </button>
-  )
-
   return (
     <Modal open={open} onClose={onClose} title={`${paymentOnly ? 'Плащане' : 'Предаване'} — ${orderNo(order)}`} size="md">
       <div className="space-y-4">
@@ -62,9 +65,9 @@ export default function HandoverDialog({ order, open, onClose, onDone, paymentOn
             </div>
             <p className="label mb-0">Клиентът плати ли?</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <Option value="full" title="Да, всичко" sub={eur(due, { dash: false })} />
-              <Option value="part" title="Част" sub="въведете сума" />
-              {!paymentOnly && <Option value="later" title="Не, по-късно" sub="остава в „Неплатени“" />}
+              <Option active={mode === 'full'} onSelect={() => setMode('full')} title="Да, всичко" sub={eur(due, { dash: false })} />
+              <Option active={mode === 'part'} onSelect={() => setMode('part')} title="Част" sub="въведете сума" />
+              {!paymentOnly && <Option active={mode === 'later'} onSelect={() => setMode('later')} title="Не, по-късно" sub="остава в „Неплатени“" />}
             </div>
             {mode !== 'later' && (
               <div className="grid grid-cols-2 gap-2">
