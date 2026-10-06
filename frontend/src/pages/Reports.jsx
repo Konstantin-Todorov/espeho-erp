@@ -72,6 +72,8 @@ function DateRangeFilter({ from, to, onChange }) {
 }
 
 // ─── Main Reports Page ────────────────────────────────────────────────────────
+const pctClass = v => v === null || v === undefined ? 'text-muted' : +v < 15 ? 'text-danger' : +v < 25 ? 'text-yellow-400' : 'text-green-400'
+
 export default function Reports() {
   const { canSeeCost } = useAuth()
   const [params] = useSearchParams()
@@ -162,7 +164,8 @@ export default function Reports() {
     if (tab === 'paid') return paidExport
     if (tab === 'products') {
       return (data || []).map(p => ({ продукт: p.product_desc, вид: TYPE_LABELS[p.product_type] || p.product_type,
-        поръчки: p.orders, бройки: p.pieces, 'м2': p.m2, 'приход_€': p.revenue }))
+        поръчки: p.orders, бройки: p.pieces, 'м2': p.m2, 'приход_€': p.revenue,
+        ...(canSeeCost ? { 'марж_€': p.margin, 'марж_%': p.margin_pct } : {}) }))
     }
     if (tab === 'receivables') {
       return (data || []).map(o => ({ номер: o.external_ref || o.order_number, клиент: o.client_name, телефон: o.client_phone || '',
@@ -170,7 +173,8 @@ export default function Reports() {
     }
     if (tab === 'clients') {
       return (data || []).map(c => ({ клиент: c.name, телефон: c.phone || '', поръчки: c.total_orders,
-        предадени: c.delivered_orders, 'м2': c.total_m2, 'оборот_€': c.total_revenue, 'ср_поръчка_€': c.avg_order_value }))
+        предадени: c.delivered_orders, 'м2': c.total_m2, 'оборот_€': c.total_revenue, 'ср_поръчка_€': c.avg_order_value,
+        ...(canSeeCost ? { 'марж_€': c.margin, 'марж_%': c.margin_pct } : {}) }))
     }
     if (tab === 'defects') {
       return data.byCause?.map(c => ({
@@ -340,9 +344,10 @@ export default function Reports() {
       {!loading && tab === 'products' && data && (
         <div className="table-container">
           <table>
-            <thead><tr><th>Продукт / услуга</th><th>Вид</th><th className="text-right">Поръчки</th><th className="text-right">Бройки</th><th className="text-right">м²</th><th className="text-right">Приход</th></tr></thead>
+            <thead><tr><th>Продукт / услуга</th><th>Вид</th><th className="text-right">Поръчки</th><th className="text-right">Бройки</th><th className="text-right">м²</th><th className="text-right">Приход</th>
+              {canSeeCost && <th className="text-right" title="Приход без ДДС − себестойност, по редовете с цена и себестойност">Марж</th>}</tr></thead>
             <tbody>
-              {data.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-muted">Няма данни за периода</td></tr>}
+              {data.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted">Няма данни за периода</td></tr>}
               {data.map((p, i) => (
                 <tr key={i}>
                   <td className="text-white">{p.product_desc}</td>
@@ -351,11 +356,19 @@ export default function Reports() {
                   <td className="text-right text-muted">{num(p.pieces, 0)}</td>
                   <td className="text-right">{num(p.m2, 1)}</td>
                   <td className="text-right font-medium">{eur(p.revenue)}</td>
+                  {canSeeCost && (
+                    <td className="text-right whitespace-nowrap">
+                      {p.margin_pct !== null && p.margin_pct !== undefined
+                        ? <><span className={pctClass(p.margin_pct)}>{(+p.margin_pct).toFixed(0)}%</span> <span className="text-xs text-muted">{eur(p.margin)}</span></>
+                        : <span className="text-muted">—</span>}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="text-xs text-muted p-3">Приходът е по редовете с цена. При дилърски поръчки цялата сума често стои на първия ред.</p>
+          <p className="text-xs text-muted p-3">Приходът е по редовете с цена. При дилърски поръчки цялата сума често стои на първия ред.
+            {canSeeCost && ' Маржът е без ДДС и е сметнат само по редовете, които имат и цена, и себестойност. Червено = под 15%.'}</p>
         </div>
       )}
 
@@ -447,12 +460,13 @@ export default function Reports() {
                   <th className="text-right">м²</th>
                   <th className="text-right">Оборот</th>
                   <th className="text-right">Ср. поръчка</th>
+                  {canSeeCost && <th className="text-right" title="Приход без ДДС − себестойност на предадените поръчки">Марж</th>}
                   <th>Последна</th>
                 </tr>
               </thead>
               <tbody>
                 {data.length === 0 && (
-                  <tr><td colSpan={7} className="text-center py-8 text-muted">Няма данни</td></tr>
+                  <tr><td colSpan={8} className="text-center py-8 text-muted">Няма данни</td></tr>
                 )}
                 {data.map((c, i) => (
                   <tr key={i} className="cursor-pointer" onClick={() => navigate(`/clients/${c.id}`)}>
@@ -465,6 +479,13 @@ export default function Reports() {
                     <td className="text-right text-muted">{num(c.total_m2, 0)}</td>
                     <td className="text-right font-semibold text-white">{eur(c.total_revenue)}</td>
                     <td className="text-right text-muted">{eur(c.avg_order_value)}</td>
+                    {canSeeCost && (
+                      <td className="text-right whitespace-nowrap">
+                        {c.margin_pct !== null && c.margin_pct !== undefined
+                          ? <><span className={pctClass(c.margin_pct)}>{(+c.margin_pct).toFixed(0)}%</span> <span className="text-xs text-muted">{eur(c.margin)}</span></>
+                          : <span className="text-muted">—</span>}
+                      </td>
+                    )}
                     <td className="text-muted text-xs">{dateBg(c.last_order_at, 'd MMM yy')}</td>
                   </tr>
                 ))}

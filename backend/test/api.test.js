@@ -424,3 +424,15 @@ test('home page: biggest clients for the owner, no margin for the office', async
   assert.equal(o.data.topClients[0].margin, undefined);
   assert.equal(o.data.ytd.margin, undefined);
 });
+
+test('product and client reports show margin to the owner only', async () => {
+  const q = '?from=2026-01-01&to=2026-12-31';
+  const p = await call('GET', `/reports/products${q}`);
+  assert.ok(p.data.some(r => r.margin_pct !== null));
+  const po = await call('GET', `/reports/products${q}`, { role: 'office' });
+  assert.equal(po.data[0].margin, undefined);
+  const c = await call('GET', `/reports/clients${q}`);
+  assert.ok(c.data.some(r => r.margin_pct !== null));
+  const co = await call('GET', `/reports/clients${q}`, { role: 'office' });
+  assert.equal(co.data[0].margin_pct, undefined);
+});

@@ -249,15 +249,19 @@ router.get('/clients', async (req, res) => {
       COALESCE(SUM(o.sale_price) FILTER (WHERE ${SOLD}), 0)::numeric(12,2) AS total_revenue,
       COALESCE(AVG(o.sale_price) FILTER (WHERE ${SOLD}), 0)::numeric(12,2) AS avg_order_value,
       COALESCE(SUM(${M2}) FILTER (WHERE ${SOLD}), 0)::numeric(12,1) AS total_m2,
-      MAX(o.created_at) AS last_order_at
+      MAX(o.created_at) AS last_order_at,
+      ROUND(SUM(o.sale_price / $4 - COALESCE(oc.total_cost, 0)) FILTER (WHERE ${SOLD} AND oc.total_cost > 0), 2) AS margin,
+      ROUND(SUM(o.sale_price / $4 - COALESCE(oc.total_cost, 0)) FILTER (WHERE ${SOLD} AND oc.total_cost > 0)
+            / NULLIF(SUM(o.sale_price / $4) FILTER (WHERE ${SOLD} AND oc.total_cost > 0), 0) * 100, 1) AS margin_pct
     FROM clients c
     JOIN orders o ON o.client_id=c.id AND ${range('o.created_at')}
+    LEFT JOIN order_costs oc ON oc.order_id = o.id
     GROUP BY c.id, c.name, c.phone
     ORDER BY total_revenue DESC
     LIMIT $3`,
-    [from||null, to||null, limit]
+    [from||null, to||null, limit, await vatDivisor()]
   );
-  res.json(rows);
+  res.json(stripCost(req.user, rows));
 });
 
 // GET /api/reports/order-types — breakdown by type
@@ -287,15 +291,20 @@ router.get('/products', async (req, res) => {
            COUNT(*)::int AS lines, COUNT(DISTINCT o.id)::int AS orders,
            COALESCE(SUM(oi.qty),0)::numeric(12,1) AS pieces,
            COALESCE(SUM(COALESCE(oi.area_m2 * oi.qty, oi.width * oi.height / 1e6 * oi.qty)) FILTER (WHERE oi.uom='m2'),0)::numeric(12,1) AS m2,
-           COALESCE(SUM(oi.line_total),0)::numeric(12,2) AS revenue
+           COALESCE(SUM(oi.line_total),0)::numeric(12,2) AS revenue,
+           -- margin only over lines that carry both a price and a cost (dealer orders sometimes
+           -- put the whole price on the first line)
+           ROUND(SUM(oi.line_total / $3 - oi.line_cost) FILTER (WHERE oi.line_total > 0 AND oi.line_cost > 0), 2) AS margin,
+           ROUND(SUM(oi.line_total / $3 - oi.line_cost) FILTER (WHERE oi.line_total > 0 AND oi.line_cost > 0)
+                 / NULLIF(SUM(oi.line_total / $3) FILTER (WHERE oi.line_total > 0 AND oi.line_cost > 0), 0) * 100, 1) AS margin_pct
     FROM order_items oi JOIN orders o ON o.id = oi.order_id
     WHERE ${SOLD} AND ${range(SOLD_AT)}
     GROUP BY oi.product_desc, oi.product_type
     ORDER BY m2 DESC, revenue DESC
     LIMIT 50`,
-    [from||null, to||null]
+    [from||null, to||null, await vatDivisor()]
   );
-  res.json(rows);
+  res.json(stripCost(req.user, rows));
 });
 
 // GET /api/reports/receivables — unpaid / partially paid orders
