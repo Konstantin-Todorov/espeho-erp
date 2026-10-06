@@ -20,12 +20,14 @@ router.get('/', async (req, res) => {
     conds.push(`(c.name ILIKE $1 OR c.phone ILIKE $1 OR c.email ILIKE $1 OR c.eik ILIKE $1 OR c.city ILIKE $1)`);
   }
   // Clients whose card still needs completing
+  if (req.query.favorites === '1') conds.push('c.is_favorite = true');
   if (req.query.missing === 'eik') conds.push(`c.eik IS NULL AND c.name <> 'КЛИЕНТ НА МЯСТО (БЕЗ ИМЕ)'`);
   if (req.query.missing === 'phone') conds.push(`c.phone IS NULL AND c.name <> 'КЛИЕНТ НА МЯСТО (БЕЗ ИМЕ)'`);
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-  const sort = req.query.sort === 'recent'
+  // Favorites always come first, then the chosen order
+  const sort = 'c.is_favorite DESC, ' + (req.query.sort === 'recent'
     ? 'last_order_at DESC NULLS LAST, c.name'
-    : req.query.sort === 'orders' ? 'order_count DESC, c.name' : 'c.name';
+    : req.query.sort === 'orders' ? 'order_count DESC, c.name' : 'c.name');
 
   const [data, count] = await Promise.all([
     pool.query(
@@ -193,14 +195,14 @@ router.post('/', roleCheck('admin', 'office'), async (req, res) => {
 });
 
 // PATCH /api/clients/:id — only keys present in the body change; '' clears a field
-const FIELDS = ['name', 'phone', 'email', 'address', 'city', 'eik', 'mol', 'source', 'notes', 'active',
+const FIELDS = ['name', 'phone', 'email', 'address', 'city', 'eik', 'mol', 'source', 'notes', 'active', 'is_favorite',
   'vat_number', 'website', 'legal_name', 'registry_checked_at'];
 router.patch('/:id', roleCheck('admin', 'office'), async (req, res) => {
   const sets = [], params = [];
   for (const f of FIELDS) {
     if (!(f in req.body)) continue;
     let v = req.body[f];
-    if (f === 'active') v = !!v;
+    if (f === 'active' || f === 'is_favorite') v = !!v;
     else if (f === 'registry_checked_at') v = v ? new Date() : null;
     else if (typeof v === 'string') v = v.trim() || null;
     if (f === 'name' && !v) return res.status(400).json({ error: 'Името е задължително' });

@@ -154,7 +154,7 @@ router.get('/', async (req, res) => {
     SELECT o.id, o.order_number, o.external_ref, o.client_ref, o.status, o.order_type, o.order_category,
            o.payment_status, o.installation_status, o.fulfillment, o.deadline, o.is_urgent,
            o.created_at, o.updated_at, o.delivered_at, o.sale_price,
-           c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
+           c.id AS client_id, c.name AS client_name, c.phone AS client_phone, c.is_favorite AS client_favorite,
            u.name AS created_by_name, oc.total_cost,
            (SELECT COALESCE(SUM(amount),0) FROM payments p WHERE p.order_id = o.id) AS paid_amount,
            (SELECT COALESCE(SUM(COALESCE(oi.area_m2 * oi.qty, oi.width * oi.height / 1e6 * oi.qty)),0)::numeric(10,2)
@@ -217,7 +217,7 @@ router.get('/:id/history', roleCheck('admin', 'office'), async (req, res) => {
 // ─── GET /api/orders/:id — full detail ──────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   const orderQ = await pool.query(
-    `SELECT o.*, c.name AS client_name, c.phone AS client_phone, c.email AS client_email,
+    `SELECT o.*, c.name AS client_name, c.phone AS client_phone, c.email AS client_email, c.is_favorite AS client_favorite,
             c.address AS client_address, u.name AS created_by_name, ub.name AS updated_by_name
      FROM orders o
      JOIN clients c ON c.id = o.client_id

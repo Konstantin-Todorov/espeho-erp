@@ -6,6 +6,7 @@ import { OrderStatusBadge, PaymentStatusBadge, CategoryBadge } from '../componen
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
 import ClientPrices from '../components/ClientPrices'
+import FavoriteStar from '../components/ui/FavoriteStar'
 import RegistryLookup from '../components/RegistryLookup'
 import useOptions from '../hooks/useOptions'
 import { Building2, BadgeCheck } from 'lucide-react'
@@ -233,10 +234,11 @@ export default function ClientDetail() {
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
           <Link to="/clients" className="text-muted hover:text-white text-sm">← Клиенти</Link>
-          <div className="mt-1">
+          <div className="mt-1 flex items-center gap-1">
             {isOffice
               ? <div className="text-2xl font-bold [&_p]:text-2xl [&_p]:font-bold"><InlineEdit label="" value={client.name} onSave={v => patchField('name', v)} /></div>
               : <h1 className="text-2xl font-bold text-white">{client.name}</h1>}
+            {isOffice && <FavoriteStar key={client.id} client={client} size="w-6 h-6" onChange={v => setClient(c => ({ ...c, is_favorite: v }))} />}
           </div>
           <p className="text-muted text-sm mt-0.5">
             {client.city && `${client.city} · `}

@@ -9,6 +9,7 @@ import Modal from '../components/ui/Modal'
 import ClientPicker from '../components/ui/ClientPicker'
 import OptionSelect from '../components/ui/OptionSelect'
 import OrderPicker from '../components/ui/OrderPicker'
+import { FavMark } from '../components/ui/FavoriteStar'
 import useSettings from '../hooks/useSettings'
 import { priceLine, sumLines } from '../utils/pricing'
 import {
@@ -507,7 +508,7 @@ export default function Orders() {
                       {o.open_defects > 0 && <span className="badge bg-red-500/20 text-red-400 text-[10px]">{o.open_defects} брак</span>}
                     </td>
                     <td className="max-w-[14rem]">
-                      <div className="font-medium text-white truncate">{o.client_name}</div>
+                      <div className="font-medium text-white truncate">{o.client_name}<FavMark on={o.client_favorite} /></div>
                       {o.client_phone && <div className="text-xs text-muted">{o.client_phone}</div>}
                     </td>
                     <td className="hidden md:table-cell">

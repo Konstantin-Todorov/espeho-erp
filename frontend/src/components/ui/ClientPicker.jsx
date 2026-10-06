@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import api from '../../api/axios'
 import toast from 'react-hot-toast'
+import { Star } from 'lucide-react'
 
 // Searchable client field. Type a name / phone / ЕИК → pick from matches, or create a new client in place.
 // value: client id; selected: optional { id, name } to show without a lookup; onChange(client | null)
@@ -29,7 +30,8 @@ export default function ClientPicker({ value, selected, onChange, autoFocus, pla
     if (!open) return
     const t = setTimeout(() => {
       setLoading(true)
-      api.get('/clients', { params: { search: query || undefined, limit: 12, sort: query ? 'orders' : 'recent' } })
+      // Favorites come first (server-side), then the most recent / most frequent clients
+      api.get('/clients', { params: { search: query || undefined, limit: 15, sort: query ? 'orders' : 'recent' } })
         .then(r => { setResults(r.data.data); setActive(0) })
         .finally(() => setLoading(false))
     }, 200)
@@ -128,13 +130,20 @@ export default function ClientPicker({ value, selected, onChange, autoFocus, pla
           className="bg-surface border border-border rounded-xl shadow-2xl overflow-hidden">
           <div className="max-h-72 overflow-y-auto">
             {loading && !results.length && <p className="text-center text-muted text-sm py-3">Търсене…</p>}
-            {!query && !!results.length && <p className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-muted">Последни клиенти</p>}
             {results.map((c, i) => (
-              <button key={c.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => pick(c)}
+              <div key={c.id}>
+              {!query && (i === 0 || results[i - 1].is_favorite !== c.is_favorite) && (
+                <p className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-muted">{c.is_favorite ? 'Любими клиенти' : 'Последни клиенти'}</p>
+              )}
+              <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => pick(c)}
                 className={`w-full text-left px-3 py-2 flex justify-between gap-2 ${i === active ? 'bg-border' : 'hover:bg-border'}`}>
-                <span className="text-sm text-white truncate">{c.name}</span>
+                <span className="text-sm text-white truncate flex items-center gap-1.5">
+                  {c.is_favorite && <Star className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="currentColor" />}
+                  {c.name}
+                </span>
                 <span className="text-xs text-muted flex-shrink-0">{c.phone || ''} {c.order_count ? `· ${c.order_count} поръчки` : ''}</span>
               </button>
+              </div>
             ))}
             {!loading && query && !results.length && <p className="text-center text-muted text-sm py-3">Няма такъв клиент</p>}
           </div>

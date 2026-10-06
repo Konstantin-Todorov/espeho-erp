@@ -5,9 +5,10 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { PageLoader } from '../components/ui/Spinner'
 import HandoverDialog from '../components/order/HandoverDialog'
+import { FavMark } from '../components/ui/FavoriteStar'
 import { PaymentStatusBadge } from '../components/ui/StatusBadge'
 import { FULFILLMENT_LABELS, orderNo, eur, dateBg, todayStr } from '../utils/labels'
-import { Wrench, Truck, Phone } from 'lucide-react'
+import { Wrench, Truck, Phone, Star } from 'lucide-react'
 
 // "Работен ден" — the office runs the day from one screen. Every active order sits in the column
 // of what has to happen next, and the card's button does exactly that next step.
@@ -51,7 +52,7 @@ function Card({ o, col, onAction, canSeePrices, busy, draggable }) {
           <p className="font-bold text-accent text-sm leading-tight">
             {orderNo(o)} {o.is_urgent && <span className="inline-block w-2 h-2 rounded-full bg-danger align-middle" title="Спешна" />}
           </p>
-          <p className="text-sm text-white truncate">{o.client_name}{o.client_ref && <span className="text-xs text-purple-300"> · {o.client_ref}</span>}</p>
+          <p className="text-sm text-white truncate">{o.client_name}<FavMark on={o.client_favorite} />{o.client_ref && <span className="text-xs text-purple-300"> · {o.client_ref}</span>}</p>
         </div>
         <DeadlineChip deadline={o.deadline} done={col.key === 'debt'} />
       </div>
@@ -107,6 +108,10 @@ export default function Board() {
   const [onlyUrgent, setOnlyUrgent] = useState(false)
   const [handover, setHandover] = useState(null) // { order, paymentOnly }
   const [dragOver, setDragOver] = useState(null)
+  const [favorites, setFavorites] = useState([])
+  useEffect(() => {
+    if (isOffice) api.get('/clients', { params: { favorites: 1, limit: 12, sort: 'orders' } }).then(r => setFavorites(r.data.data)).catch(() => {})
+  }, [isOffice])
 
   const load = useCallback(async () => {
     try {
@@ -194,6 +199,18 @@ export default function Board() {
           {isOffice && <Link to="/orders?new=1" className="btn-primary">+ Нова поръчка</Link>}
         </div>
       </div>
+
+      {favorites.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-4">
+          <span className="text-xs text-muted mr-1 inline-flex items-center gap-1"><Star className="w-3.5 h-3.5 text-yellow-400" fill="currentColor" /> Нова поръчка за:</span>
+          {favorites.map(c => (
+            <Link key={c.id} to={`/orders?new=1&client=${c.id}`}
+              className="text-xs px-2.5 py-1 rounded-full border border-border text-gray-300 hover:border-accent hover:text-white transition-colors">
+              {c.name}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {active.length === 0 && byCol.debt?.length === 0 && !q && (
         <div className="card mb-4 flex flex-col md:flex-row md:items-center gap-4 border-accent/30">

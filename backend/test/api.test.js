@@ -326,3 +326,13 @@ test('register proposals: accept fills ЕИК and only empty fields', async () =
   assert.equal(d.data.phone, '0888 111 222', 'existing phone is not overwritten');
   assert.ok(d.data.registry_checked_at);
 });
+
+test('favorite clients come first and can be toggled', async () => {
+  const c = await call('POST', '/clients', { role: 'office', body: { name: 'ЯЯЯ Любим Тест' } });
+  assert.equal((await call('PATCH', `/clients/${c.data.id}`, { role: 'office', body: { is_favorite: true } })).status, 200);
+  const list = await call('GET', '/clients?sort=name&limit=5', { role: 'office' });
+  assert.equal(list.data.data[0].is_favorite, true);
+  const fav = await call('GET', '/clients?favorites=1&limit=100', { role: 'office' });
+  assert.ok(fav.data.data.some(x => x.id === c.data.id));
+  assert.ok(fav.data.data.every(x => x.is_favorite));
+});

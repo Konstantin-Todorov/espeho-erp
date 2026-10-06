@@ -53,7 +53,13 @@ export default function CommandPalette({ open, onClose }) {
   useEffect(() => {
     if (!open) return
     const term = q.trim()
-    if (term.length < 2) { setOrders([]); setClients([]); return }
+    if (term.length < 2) {
+      setOrders([])
+      // Nothing typed yet: offer the favorite clients right away
+      if (isOffice) api.get('/clients', { params: { favorites: 1, limit: 8, sort: 'name' } }).then(r => setClients(r.data.data)).catch(() => setClients([]))
+      else setClients([])
+      return
+    }
     const t = setTimeout(() => {
       api.get('/orders', { params: { search: term, limit: 6 } }).then(r => setOrders(r.data.data)).catch(() => {})
       if (isOffice) api.get('/clients', { params: { search: term, limit: 5, sort: 'orders' } }).then(r => setClients(r.data.data)).catch(() => {})
@@ -70,8 +76,8 @@ export default function CommandPalette({ open, onClose }) {
   const items = [
     ...orders.map(o => ({ key: 'o' + o.id, group: 'Поръчки', to: `/orders/${o.id}`,
       title: `${orderNo(o)} · ${o.client_name}`, meta: `${o.status}${canSeePrices && o.sale_price ? ' · ' + eur(o.sale_price) : ''}` })),
-    ...clients.map(c => ({ key: 'c' + c.id, group: 'Клиенти', to: `/clients/${c.id}`,
-      title: c.name, meta: [c.phone, c.order_count ? `${c.order_count} поръчки` : ''].filter(Boolean).join(' · ') })),
+    ...clients.map(c => ({ key: 'c' + c.id, group: q.trim().length < 2 ? 'Любими клиенти' : 'Клиенти', to: `/clients/${c.id}`,
+      title: (c.is_favorite ? '★ ' : '') + c.name, meta: [c.phone, c.order_count ? `${c.order_count} поръчки` : ''].filter(Boolean).join(' · ') })),
     ...actions.map(a => ({ key: 'a' + a.to, group: 'Действия', to: a.to, title: a.label, meta: a.hint })),
   ]
 

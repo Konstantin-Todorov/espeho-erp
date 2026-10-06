@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import { dateBg, num } from '../utils/labels'
 import RegistryLookup from '../components/RegistryLookup'
 import RegistrySuggestions from '../components/RegistrySuggestions'
+import FavoriteStar from '../components/ui/FavoriteStar'
 import OptionSelect from '../components/ui/OptionSelect'
 import { Building2 } from 'lucide-react'
 
@@ -44,7 +45,8 @@ export default function Clients() {
   const fetchClients = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await api.get('/clients', { params: { search: query || undefined, page, limit: PAGE_SIZE, sort, missing: missing || undefined } })
+      const { data } = await api.get('/clients', { params: { search: query || undefined, page, limit: PAGE_SIZE, sort,
+        missing: missing && missing !== 'favorites' ? missing : undefined, favorites: missing === 'favorites' ? 1 : undefined } })
       setClients(data.data)
       setTotal(data.total)
     } catch { toast.error('Грешка при зареждане') }
@@ -88,6 +90,7 @@ export default function Clients() {
           <option value="">Всички клиенти</option>
           <option value="eik">Без ЕИК (за попълване)</option>
           <option value="phone">Без телефон</option>
+          <option value="favorites">Само любими</option>
         </select>
       </div>
 
@@ -102,7 +105,10 @@ export default function Clients() {
               {clients.map(c => (
                 <tr key={c.id} className="cursor-pointer" onClick={() => navigate(`/clients/${c.id}`)}>
                   <td>
-                    <p className="font-medium text-white">{c.name}</p>
+                    <p className="font-medium text-white flex items-center gap-1">
+                      {isOffice && <FavoriteStar key={c.id + String(c.is_favorite)} client={c} size="w-4 h-4" className="-ml-1" onChange={() => fetchClients()} />}
+                      {c.name}
+                    </p>
                     {c.eik && <p className="text-xs text-muted">ЕИК: {c.eik}</p>}
                   </td>
                   <td className="text-muted">{c.phone || '—'}</td>
