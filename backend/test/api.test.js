@@ -336,3 +336,31 @@ test('favorite clients come first and can be toggled', async () => {
   assert.ok(fav.data.data.some(x => x.id === c.data.id));
   assert.ok(fav.data.data.every(x => x.is_favorite));
 });
+
+test('costs and margins are for the owner only; office sees sale prices', async () => {
+  const off = await call('GET', `/orders/${ids.order}`, { role: 'office' });
+  assert.notEqual(off.data.sale_price, undefined);
+  assert.equal(off.data.costs, null);
+  for (const it of off.data.items) assert.equal(it.line_cost, undefined);
+  const adm = await call('GET', `/orders/${ids.order}`);
+  assert.ok(adm.data.costs);
+  const cat = await call('GET', '/products?limit=1', { role: 'office' });
+  assert.equal(cat.data[0].unit_price, undefined);
+  const rep = await call('GET', '/reports/costs?from=2026-01-01&to=2026-06-30', { role: 'office' });
+  assert.equal(rep.data.summary.total_cost, undefined);
+  assert.notEqual(rep.data.summary.total_revenue, undefined);
+});
+
+test('paid orders report with extra expenses (owner only)', async () => {
+  assert.equal((await call('POST', `/orders/${ids.order}/expenses`, { role: 'office', body: { amount: 10 } })).status, 403);
+  const e = await call('POST', `/orders/${ids.order}/expenses`, { body: { amount: 15, category: 'транспорт', description: 'курс' } });
+  assert.equal(e.status, 201);
+  const r = await call('GET', '/reports/paid');
+  assert.equal(r.status, 200);
+  const row = r.data.rows.find(x => x.id === ids.order);
+  assert.ok(row, 'paid order is in the report');
+  assert.equal(+row.expenses, 15);
+  assert.equal((await call('GET', '/reports/paid', { role: 'office' })).status, 403);
+  const refs = await call('GET', `/clients/${ids.client}/refs`, { role: 'office' });
+  assert.equal(refs.status, 200);
+});

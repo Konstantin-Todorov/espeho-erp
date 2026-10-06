@@ -114,10 +114,15 @@ function AdminDashboard() {
             <StatCard to="/reports" label="Приход" value={eurRound(ytd.revenue)} color="text-green-400"
               sub={`${num(ytd.orders, 0)} предадени поръчки · с ДДС`}
               tooltip="Предадени поръчки (без гаранции/вътрешни), по дата на предаване" icon={Banknote} />
-            <StatCard to="/reports" label="Марж" value={ytdMarginPct !== null ? `${ytdMarginPct}%` : '—'}
-              sub={`${eurRound(ytd.margin)} без ДДС`}
-              color={+ytd.margin > 0 ? 'text-green-400' : 'text-danger'}
-              tooltip="(Приход без ДДС − себестойност) / приход без ДДС" icon={TrendingUp} />
+            {ytd.margin !== undefined ? (
+              <StatCard to="/reports?tab=paid" label="Марж" value={ytdMarginPct !== null ? `${ytdMarginPct}%` : '—'}
+                sub={`${eurRound(ytd.margin)} без ДДС`}
+                color={+ytd.margin > 0 ? 'text-green-400' : 'text-danger'}
+                tooltip="(Приход без ДДС − себестойност) / приход без ДДС" icon={TrendingUp} />
+            ) : (
+              <StatCard to="/orders?tab=all" label="Средна поръчка" value={+ytd.orders > 0 ? eurRound(+ytd.revenue / +ytd.orders) : '—'}
+                sub="с ДДС" icon={TrendingUp} />
+            )}
             <StatCard to="/reports" label="Произведени м²" value={num(ytd.m2, 0)} color="text-accent"
               sub={+ytd.m2 > 0 ? `≈ ${eur(+ytd.revenue / +ytd.m2, { dash: false })} на м²` : ''}
               tooltip="Квадратура на предадените поръчки" icon={Grid2x2} />

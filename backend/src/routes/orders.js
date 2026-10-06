@@ -4,7 +4,7 @@ const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 const notify = require('../utils/notify');
 const { sendEmail, orderReadyEmail } = require('../utils/email');
-const { canSeeMoney, stripMoney, ORDER_FIELDS, ITEM_FIELDS, COST_FIELDS, DEFECT_FIELDS, LABOR_FIELDS } = require('../utils/financial');
+const { canSeeMoney, stripMoney, canSeeCost, stripCost, ORDER_FIELDS, ITEM_FIELDS, COST_FIELDS, DEFECT_FIELDS, LABOR_FIELDS } = require('../utils/financial');
 const { getSettings, priceLine, sumLines, n } = require('../utils/pricing');
 const { stageTemplate } = require('./options');
 const { audit, diff } = require('../utils/audit');
@@ -177,7 +177,7 @@ router.get('/', async (req, res) => {
     pool.query(query, [...params, limit, (page - 1) * limit]),
     pool.query(`SELECT COUNT(*)::int FROM orders o JOIN clients c ON c.id = o.client_id ${where}`, params),
   ]);
-  res.json({ data: stripMoney(req.user, data.rows), total: count.rows[0].count, page, limit });
+  res.json({ data: stripCost(req.user, stripMoney(req.user, data.rows)), total: count.rows[0].count, page, limit });
 });
 
 // ─── GET /api/orders/price-hints?desc=…&client_id=… ─────────────────────────────
@@ -267,12 +267,12 @@ router.get('/:id', async (req, res) => {
     ...stripMoney(req.user, order),
     ...(canSeeMoney(req.user) ? { paid_amount: paid } : {}),
     allowed_statuses: allowedNext(req.user.role, order.status),
-    items: stripMoney(req.user, items.rows, ITEM_FIELDS.concat(['line_cost'])),
+    items: stripCost(req.user, stripMoney(req.user, items.rows, ITEM_FIELDS.concat(['line_cost']))),
     stages: stages.rows,
-    costs: costs.rows[0] ? stripMoney(req.user, costs.rows[0], COST_FIELDS) : null,
+    costs: costs.rows[0] && canSeeCost(req.user) ? costs.rows[0] : null,
     defects: stripMoney(req.user, defects.rows, DEFECT_FIELDS),
     files: files.rows,
-    labor: stripMoney(req.user, labor.rows, LABOR_FIELDS),
+    labor: stripCost(req.user, stripMoney(req.user, labor.rows, LABOR_FIELDS)),
     payments: payments.rows,
     related_original: related.rows.find(r => r.is_original) || null,
     related_claims: related.rows.filter(r => !r.is_original),
@@ -569,6 +569,37 @@ router.delete('/:id/payments/:paymentId', roleCheck('admin', 'office'), async (r
     return refreshPaymentStatus(client, req.params.id);
   }).catch(err => send(res, err));
   if (result) res.json(result);
+});
+
+// ─── Extra expenses per order (owner only) ───────────────────────────────────────
+router.get('/:id/expenses', roleCheck('admin'), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT e.*, u.name AS created_by_name FROM order_expenses e LEFT JOIN users u ON u.id = e.created_by
+     WHERE e.order_id=$1 ORDER BY e.spent_at, e.created_at`, [req.params.id]);
+  res.json(rows);
+});
+
+router.post('/:id/expenses', roleCheck('admin'), async (req, res) => {
+  const amount = n(req.body.amount);
+  if (!amount) return res.status(400).json({ error: 'Въведете сума' });
+  const { rows: [o] } = await pool.query('SELECT id FROM orders WHERE id=$1', [req.params.id]);
+  if (!o) return res.status(404).json({ error: 'Поръчката не е намерена' });
+  const { rows: [e] } = await pool.query(
+    `INSERT INTO order_expenses (order_id, category, description, amount, spent_at, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [o.id, req.body.category || 'друго', req.body.description?.trim() || null, amount,
+     req.body.spent_at || new Date().toISOString().slice(0, 10), req.user.id]);
+  await audit({ user: req.user, action: 'expense_add', table: 'orders', id: o.id,
+    after: { category: e.category, amount: e.amount, description: e.description } });
+  res.status(201).json(e);
+});
+
+router.delete('/:id/expenses/:eid', roleCheck('admin'), async (req, res) => {
+  const { rows } = await pool.query(
+    'DELETE FROM order_expenses WHERE id=$1 AND order_id=$2 RETURNING category, amount', [req.params.eid, req.params.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'Разходът не е намерен' });
+  await audit({ user: req.user, action: 'expense_delete', table: 'orders', id: req.params.id, before: rows[0] });
+  res.json({ ok: true });
 });
 
 module.exports = router;

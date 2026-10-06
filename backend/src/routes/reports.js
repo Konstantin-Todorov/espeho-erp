@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 const { getSettings, n } = require('../utils/pricing');
+const { stripCost } = require('../utils/financial');
 
 const router = express.Router();
 router.use(auth, roleCheck('admin','office'));
@@ -106,7 +107,7 @@ router.get('/dashboard', async (req, res) => {
   const y = ytd.rows[0];
   res.json({
     orderStats: orderStats.rows,
-    revenue: revenueStats.rows[0],
+    revenue: stripCost(req.user, revenueStats.rows[0]),
     prevMonth: prevMonthStats.rows[0],
     defects: defectStats.rows[0],
     lowStockCount: lowStock.rows[0].count,
@@ -114,8 +115,8 @@ router.get('/dashboard', async (req, res) => {
     urgentActive: urgentActive.rows[0],
     ordersByDay: ordersByDay.rows,
     revenueByWeek: revenueByWeek.rows,
-    ytd: { ...y, margin: (+y.revenue_net - +y.cost).toFixed(2) },
-    monthly: monthly.rows,
+    ytd: stripCost(req.user, { ...y, margin: (+y.revenue_net - +y.cost).toFixed(2) }),
+    monthly: stripCost(req.user, monthly.rows),
     receivables: receivables.rows[0],
     quotationsPending,
     deliveriesPending,
@@ -146,7 +147,7 @@ router.get('/orders', async (req, res) => {
     LIMIT 5000`,
     [from||null, to||null, status||null, client_id||null, vat]
   );
-  res.json(rows);
+  res.json(stripCost(req.user, rows));
 });
 
 // GET /api/reports/costs — cost vs revenue (sold orders, by hand-over date)
@@ -181,7 +182,7 @@ router.get('/costs', async (req, res) => {
       WHERE ${where}
       GROUP BY 1 ORDER BY 1`, [from||null, to||null, vat]),
   ]);
-  res.json({ summary: summary.rows[0], monthly: monthly.rows });
+  res.json({ summary: stripCost(req.user, summary.rows[0]), monthly: stripCost(req.user, monthly.rows) });
 });
 
 // GET /api/reports/materials — material consumption
@@ -221,7 +222,7 @@ router.get('/production', async (req, res) => {
     ORDER BY total_minutes DESC, u.name`,
     [from||null, to||null]
   );
-  res.json(rows);
+  res.json(stripCost(req.user, rows, ['labor_cost']));
 });
 
 // GET /api/reports/clients — revenue by client
@@ -298,6 +299,49 @@ router.get('/receivables', async (req, res) => {
       AND COALESCE(o.sale_price,0) > 0
     ORDER BY (o.status = 'ДОСТАВЕНА') DESC, o.delivered_at ASC NULLS LAST, o.created_at`);
   res.json(rows);
+});
+
+// GET /api/reports/paid?from=&to= — paid orders with cost, extra expenses and profit (owner only).
+// An order counts in the period of its last payment; old imported orders (paid, no payment records)
+// count on their hand-over date.
+router.get('/paid', roleCheck('admin'), async (req, res) => {
+  const { from, to } = req.query;
+  const vat = await vatDivisor();
+  const { rows } = await pool.query(`
+    WITH p AS (
+      SELECT order_id, SUM(amount) AS paid, MAX(paid_at) AS last_paid,
+             STRING_AGG(DISTINCT method, ', ') AS methods
+      FROM payments GROUP BY order_id),
+    x AS (
+      SELECT order_id, SUM(amount) AS expenses,
+             JSON_AGG(JSON_BUILD_OBJECT('id', id, 'category', category, 'description', description,
+                                        'amount', amount, 'spent_at', spent_at) ORDER BY spent_at, created_at) AS items
+      FROM order_expenses GROUP BY order_id)
+    SELECT o.id, o.order_number, o.external_ref, o.client_ref, o.payment_status, o.order_category,
+           c.name AS client_name, o.sale_price,
+           COALESCE(p.paid, CASE WHEN o.payment_status = 'платена' THEN o.sale_price ELSE 0 END)::numeric(12,2) AS paid,
+           COALESCE(p.last_paid, o.delivered_at::date, o.created_at::date) AS paid_on,
+           p.methods,
+           ROUND(o.sale_price / $3, 2) AS sale_net,
+           COALESCE(oc.total_cost, 0)::numeric(12,2) AS cost,
+           COALESCE(x.expenses, 0)::numeric(12,2) AS expenses,
+           COALESCE(x.items, '[]') AS expense_items,
+           ROUND(o.sale_price / $3 - COALESCE(oc.total_cost, 0) - COALESCE(x.expenses, 0), 2) AS profit
+    FROM orders o
+    JOIN clients c ON c.id = o.client_id
+    LEFT JOIN order_costs oc ON oc.order_id = o.id
+    LEFT JOIN p ON p.order_id = o.id
+    LEFT JOIN x ON x.order_id = o.id
+    WHERE o.payment_status IN ('платена', 'частично') AND o.status <> 'ОТКАЗАНА'
+      AND ${range('COALESCE(p.last_paid, o.delivered_at::date, o.created_at::date)')}
+    ORDER BY paid_on DESC, o.order_number DESC
+    LIMIT 3000`, [from || null, to || null, vat]);
+  const sum = k => rows.reduce((s, r) => s + (+r[k] || 0), 0);
+  res.json({
+    rows,
+    totals: { orders: rows.length, paid: sum('paid'), sale_net: sum('sale_net'), cost: sum('cost'),
+              expenses: sum('expenses'), profit: sum('profit') },
+  });
 });
 
 // GET /api/reports/defect-analysis — defect breakdown

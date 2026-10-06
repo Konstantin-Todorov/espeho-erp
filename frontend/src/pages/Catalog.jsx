@@ -40,6 +40,7 @@ function PriceCell({ item, field, onSave }) {
 }
 
 function ItemModal({ open, onClose, item, categories, onSaved }) {
+  const { canSeeCost } = useAuth()
   const empty = { name: '', category: '', order_type: 'стъклопакет', uom: 'm2', unit_price: '', sale_price: '', default_description: '', notes: '' }
   const [f, setF] = useState(empty)
   const [saving, setSaving] = useState(false)
@@ -51,8 +52,9 @@ function ItemModal({ open, onClose, item, categories, onSaved }) {
     e.preventDefault()
     setSaving(true)
     try {
-      if (item) await api.patch(`/products/${item.id}`, f)
-      else await api.post('/products', f)
+      const body = canSeeCost ? f : (({ unit_price, ...rest }) => rest)(f)
+      if (item) await api.patch(`/products/${item.id}`, body)
+      else await api.post('/products', body)
       toast.success('Запазено')
       onSaved(); onClose()
     } catch (err) { toast.error(err.response?.data?.error || 'Грешка') }
@@ -86,10 +88,12 @@ function ItemModal({ open, onClose, item, categories, onSaved }) {
             </select>
           </label>
           <div />
-          <label>
-            <span className="label">Себестойност без ДДС</span>
-            <input className="input text-right" inputMode="decimal" value={f.unit_price} onChange={e => set({ unit_price: e.target.value })} />
-          </label>
+          {canSeeCost && (
+            <label>
+              <span className="label">Себестойност без ДДС</span>
+              <input className="input text-right" inputMode="decimal" value={f.unit_price} onChange={e => set({ unit_price: e.target.value })} />
+            </label>
+          )}
           <label>
             <span className="label">Продажна цена с ДДС</span>
             <input className="input text-right" inputMode="decimal" value={f.sale_price} onChange={e => set({ sale_price: e.target.value })} />
@@ -109,7 +113,7 @@ function ItemModal({ open, onClose, item, categories, onSaved }) {
 }
 
 export default function Catalog() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, canSeeCost } = useAuth()
   const settings = useSettings()
   const [items, setItems] = useState(null)
   const [q, setQ] = useState('')
@@ -160,7 +164,7 @@ export default function Catalog() {
           </p>
         </div>
         <div className="flex gap-2">
-          {missingPrice > 0 && (
+          {missingPrice > 0 && canSeeCost && (
             <button className="btn-secondary" onClick={fillSuggested} title="Попълва празните продажни цени по себестойност + надценка">
               <Sparkles className="w-4 h-4" /> Попълни {missingPrice} липсващи цени
             </button>
@@ -198,8 +202,8 @@ export default function Catalog() {
                 <thead>
                   <tr>
                     <th>Артикул</th><th className="hidden md:table-cell">Вид</th><th>Мярка</th>
-                    <th className="text-right">Себестойност</th><th className="text-right">Продажна (с ДДС)</th>
-                    <th className="text-right hidden sm:table-cell">Марж</th><th />
+                    {canSeeCost && <th className="text-right">Себестойност</th>}<th className="text-right">Продажна (с ДДС)</th>
+                    {canSeeCost && <th className="text-right hidden sm:table-cell">Марж</th>}<th />
                   </tr>
                 </thead>
                 <tbody>
@@ -207,7 +211,7 @@ export default function Catalog() {
                     const cost = money(i.unit_price), sale = money(i.sale_price)
                     const net = sale ? sale / (1 + (+settings.vat_pct || 20) / 100) : null
                     const margin = net && cost ? ((net - cost) / net) * 100 : null
-                    const sug = !sale ? suggest(cost, settings) : null
+                    const sug = !sale && canSeeCost ? suggest(cost, settings) : null
                     return (
                       <tr key={i.id} className={i.active ? '' : 'opacity-50'}>
                         <td>
@@ -216,7 +220,7 @@ export default function Catalog() {
                         </td>
                         <td className="hidden md:table-cell text-xs text-muted">{TYPE_LABELS[i.order_type] || i.order_type}</td>
                         <td className="text-xs text-muted">{UNIT[i.uom] || i.uom}</td>
-                        <td className="text-right"><PriceCell item={i} field="unit_price" onSave={patch} /></td>
+                        {canSeeCost && <td className="text-right"><PriceCell item={i} field="unit_price" onSave={patch} /></td>}
                         <td className="text-right">
                           <PriceCell item={i} field="sale_price" onSave={patch} />
                           {sug && (
@@ -226,9 +230,11 @@ export default function Catalog() {
                             </button>
                           )}
                         </td>
-                        <td className={`text-right text-sm hidden sm:table-cell ${margin === null ? 'text-muted' : margin < 15 ? 'text-danger' : margin < 30 ? 'text-yellow-400' : 'text-green-400'}`}>
-                          {margin === null ? '—' : `${margin.toFixed(0)}%`}
-                        </td>
+                        {canSeeCost && (
+                          <td className={`text-right text-sm hidden sm:table-cell ${margin === null ? 'text-muted' : margin < 15 ? 'text-danger' : margin < 30 ? 'text-yellow-400' : 'text-green-400'}`}>
+                            {margin === null ? '—' : `${margin.toFixed(0)}%`}
+                          </td>
+                        )}
                         <td className="text-right whitespace-nowrap">
                           <button className="p-1.5 text-muted hover:text-white" aria-label="Редактирай" onClick={() => setModal(i)}><Pencil className="w-4 h-4" /></button>
                           {isAdmin && (

@@ -50,9 +50,11 @@ export function AuthProvider({ children }) {
   const isWarehouse = ['admin','warehouse'].includes(user?.role)
   // Prices, costs and margins are for admin and office only (the server enforces the same rule)
   const canSeePrices = isOffice
+  // Cost, margin and profit are for the owner (admin) only
+  const canSeeCost = isAdmin
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, updateUser, loading, isAdmin, isOffice, isProduction, isWarehouse, canSeePrices }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser, loading, isAdmin, isOffice, isProduction, isWarehouse, canSeePrices, canSeeCost }}>
       {children}
     </AuthContext.Provider>
   )

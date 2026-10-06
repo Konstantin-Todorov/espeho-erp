@@ -24,4 +24,16 @@ function stripMoney(user, data, fields = ORDER_FIELDS) {
   return Array.isArray(data) ? data.map(r => omit(r, fields)) : omit(data, fields);
 }
 
-module.exports = { canSeeMoney, stripMoney, ORDER_FIELDS, ITEM_FIELDS, COST_FIELDS, DEFECT_FIELDS, LABOR_FIELDS };
+// Costs, margins and wages are for the owner (admin) only — the office works with sale prices.
+const canSeeCost = user => user?.role === 'admin';
+const COST_ONLY = ['total_cost', 'material_cost', 'labor_cost', 'machine_cost', 'overhead_cost', 'overhead_pct',
+                   'line_cost', 'margin', 'margin_pct', 'cost', 'hourly_rate', 'cost_delivered', 'expenses',
+                   'total_material', 'total_labor', 'total_machine', 'total_overhead', 'total_margin', 'profit'];
+
+function stripCost(user, data, fields = COST_ONLY) {
+  if (canSeeCost(user)) return data;
+  return Array.isArray(data) ? data.map(r => omit(r, fields)) : omit(data, fields);
+}
+
+module.exports = { canSeeMoney, stripMoney, canSeeCost, stripCost, COST_ONLY,
+  ORDER_FIELDS, ITEM_FIELDS, COST_FIELDS, DEFECT_FIELDS, LABOR_FIELDS };

@@ -28,6 +28,7 @@ const emptyLine = type => ({ product_desc: '', product_type: type, width: '', he
 
 // ─── Product catalog picker (glass build-ups / services) ─────────────────────
 function CatalogPicker({ onSelect, onClose, markupPct, vatPct }) {
+  const { canSeeCost } = useAuth()
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
@@ -66,7 +67,7 @@ function CatalogPicker({ onSelect, onClose, markupPct, vatPct }) {
                 </div>
                 {(t.sale_price || t.unit_price) && (
                   <div className="text-right flex-shrink-0">
-                    {t.unit_price && <p className="text-[11px] text-muted">себест. {(+t.unit_price).toFixed(2)} €</p>}
+                    {t.unit_price && canSeeCost && <p className="text-[11px] text-muted">себест. {(+t.unit_price).toFixed(2)} €</p>}
                     <p className="text-xs text-accent">
                       {t.sale_price ? `${(+t.sale_price).toFixed(2)} €` : `≈ ${suggested(t.unit_price).toFixed(2)} €`}/{UNIT_SHORT[t.uom] || 'м²'}
                     </p>
@@ -123,6 +124,13 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
   const [loading, setLoading] = useState(false)
   const [catalogIdx, setCatalogIdx] = useState(null)
   const [more, setMore] = useState(false)
+  const [clientRefs, setClientRefs] = useState([])
+
+  // A client with its own order numbers / sites (МП, АЛДИС…): offer the previous references
+  useEffect(() => {
+    if (!form.client?.id) { setClientRefs([]); return }
+    api.get(`/clients/${form.client.id}/refs`).then(r => setClientRefs(r.data)).catch(() => setClientRefs([]))
+  }, [form.client?.id])
 
   useEffect(() => { if (open) { setForm(empty()); setMore(false) } }, [open, presetClient?.id])
 
@@ -185,6 +193,16 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
         <section>
           <p className="label">1. Клиент *</p>
           <ClientPicker value={form.client?.id} selected={form.client} onChange={c => set({ client: c })} autoFocus={!presetClient} />
+          {clientRefs.length > 0 && (
+            <div className="mt-2">
+              <label className="text-xs text-muted" htmlFor="o-cref-top">Референция на клиента (негов номер / обект / етап)</label>
+              <input id="o-cref-top" className="input mt-1" list="client-refs" placeholder="изберете от списъка или напишете нова"
+                value={form.client_ref || ''} onChange={e => set({ client_ref: e.target.value })} />
+              <datalist id="client-refs">
+                {clientRefs.map(r => <option key={r.client_ref} value={r.client_ref}>{r.orders} поръчки</option>)}
+              </datalist>
+            </div>
+          )}
         </section>
 
         {/* 2. Lines */}

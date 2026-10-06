@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Download } from 'lucide-react'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import PaidReport from '../components/reports/PaidReport'
 import api from '../api/axios'
 import { PageLoader } from '../components/ui/Spinner'
 import { format, parseISO, startOfMonth, endOfMonth, startOfYear, subMonths, subYears, endOfYear } from 'date-fns'
@@ -71,7 +73,10 @@ function DateRangeFilter({ from, to, onChange }) {
 
 // ─── Main Reports Page ────────────────────────────────────────────────────────
 export default function Reports() {
-  const [tab, setTab] = useState('costs')
+  const { canSeeCost } = useAuth()
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState(params.get('tab') || (canSeeCost ? 'paid' : 'costs'))
+  const [paidExport, setPaidExport] = useState(null)
   const navigate = useNavigate()
   // Default: the year so far — a single month is often empty and looks like the system is broken
   const defaultFrom = ymd(startOfYear(new Date()))
@@ -98,6 +103,7 @@ export default function Reports() {
       products:    `/reports/products?${params}`,
       receivables: `/reports/receivables`,
     }
+    if (tab === 'paid') { setLoading(false); return }
     api.get(endpoints[tab])
       .then(r => setData(r.data))
       .catch(() => setData(null))
@@ -115,8 +121,7 @@ export default function Reports() {
         'м2': Number(m.m2 || 0).toFixed(1),
         'приход_с_ДДС_€': Number(m.revenue || 0).toFixed(2),
         'приход_без_ДДС_€': Number(m.revenue_net || 0).toFixed(2),
-        'себестойност_€': Number(m.cost || 0).toFixed(2),
-        'марж_€': Number(m.margin || 0).toFixed(2),
+        ...(canSeeCost ? { 'себестойност_€': Number(m.cost || 0).toFixed(2), 'марж_€': Number(m.margin || 0).toFixed(2) } : {}),
       }))
     }
     if (tab === 'orders') {
@@ -133,8 +138,7 @@ export default function Reports() {
         'м2': o.m2 || '',
         'цена_с_ДДС_€': o.sale_price || '',
         'цена_без_ДДС_€': o.sale_price_net || '',
-        'себестойност_€': o.total_cost || '',
-        марж_процент: o.margin_pct || '',
+        ...(canSeeCost ? { 'себестойност_€': o.total_cost || '', марж_процент: o.margin_pct || '' } : {}),
       }))
     }
     if (tab === 'production') {
@@ -155,6 +159,7 @@ export default function Reports() {
         'стойност_€': Number(m.total_value).toFixed(2),
       }))
     }
+    if (tab === 'paid') return paidExport
     if (tab === 'products') {
       return (data || []).map(p => ({ продукт: p.product_desc, вид: TYPE_LABELS[p.product_type] || p.product_type,
         поръчки: p.orders, бройки: p.pieces, 'м2': p.m2, 'приход_€': p.revenue }))
@@ -192,6 +197,7 @@ export default function Reports() {
       {/* Tabs */}
       <div className="flex border-b border-border gap-1 mb-6 overflow-x-auto">
         {[
+          ...(canSeeCost ? [{ id:'paid', label:'Платени поръчки' }] : []),
           { id:'costs',       label:'Финанси' },
           { id:'receivables', label:'Неплатени' },
           { id:'orders',      label:'Поръчки' },
@@ -219,10 +225,11 @@ export default function Reports() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { label:'Приход с ДДС', val: eur(data.summary.total_revenue, { dash: false }), sub: `без ДДС: ${eur(data.summary.total_revenue_net, { dash: false })}`, color:'text-green-400' },
+              ...(canSeeCost ? [
               { label:'Себестойност', val: eur(data.summary.total_cost, { dash: false }), sub: 'без ДДС', color:'text-white' },
               { label:'Марж', val: eur(data.summary.total_margin, { dash: false }),
                 sub: +data.summary.total_revenue_net > 0 ? `${(data.summary.total_margin / data.summary.total_revenue_net * 100).toFixed(1)}% от приход без ДДС` : '',
-                color: Number(data.summary.total_margin)>0?'text-green-400':'text-danger' },
+                color: Number(data.summary.total_margin)>0?'text-green-400':'text-danger' }] : []),
               { label:'Предадени поръчки', val: num(data.summary.order_count, 0),
                 sub: +data.summary.total_m2 > 0 ? `${num(data.summary.total_m2, 0)} м² · ${eur(data.summary.total_revenue / data.summary.total_m2)} /м²` : '', color:'text-white' },
             ].map(c => (
@@ -235,7 +242,7 @@ export default function Reports() {
           </div>
 
           {/* Cost breakdown */}
-          <div className="card">
+          {canSeeCost && <div className="card">
             <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Структура на разходите</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               {[
@@ -253,7 +260,7 @@ export default function Reports() {
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* Monthly chart */}
           {data.monthly.length > 0 && (
@@ -269,8 +276,8 @@ export default function Reports() {
                     formatter={(v, name) => [eur(v, { dash: false }), name]} />
                   <Legend />
                   <Bar dataKey="revenue_net" name="Приход" fill="#22c55e" radius={[4,4,0,0]} />
-                  <Bar dataKey="cost"    name="Разходи" fill="#3b82f6" radius={[4,4,0,0]} />
-                  <Bar dataKey="margin"  name="Марж"    fill="#8b5cf6" radius={[4,4,0,0]} />
+                  {canSeeCost && <Bar dataKey="cost"    name="Разходи" fill="#3b82f6" radius={[4,4,0,0]} />}
+                  {canSeeCost && <Bar dataKey="margin"  name="Марж"    fill="#8b5cf6" radius={[4,4,0,0]} />}
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -278,7 +285,7 @@ export default function Reports() {
           {data.monthly.length > 0 && (
             <div className="table-container">
               <table>
-                <thead><tr><th>Месец</th><th className="text-right">Поръчки</th><th className="text-right">м²</th><th className="text-right">Приход с ДДС</th><th className="text-right">Себестойност</th><th className="text-right">Марж</th></tr></thead>
+                <thead><tr><th>Месец</th><th className="text-right">Поръчки</th><th className="text-right">м²</th><th className="text-right">Приход с ДДС</th>{canSeeCost && <th className="text-right">Себестойност</th>}{canSeeCost && <th className="text-right">Марж</th>}</tr></thead>
                 <tbody>
                   {data.monthly.map(m => (
                     <tr key={m.month}>
@@ -286,8 +293,8 @@ export default function Reports() {
                       <td className="text-right">{m.orders}</td>
                       <td className="text-right text-muted">{num(m.m2, 0)}</td>
                       <td className="text-right text-green-400">{eur(m.revenue)}</td>
-                      <td className="text-right text-muted">{eur(m.cost)}</td>
-                      <td className={`text-right font-medium ${+m.margin > 0 ? 'text-green-400' : 'text-danger'}`}>{eur(m.margin)}</td>
+                      {canSeeCost && <td className="text-right text-muted">{eur(m.cost)}</td>}
+                      {canSeeCost && <td className={`text-right font-medium ${+m.margin > 0 ? 'text-green-400' : 'text-danger'}`}>{eur(m.margin)}</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -296,6 +303,8 @@ export default function Reports() {
           )}
         </div>
       )}
+
+      {tab === 'paid' && canSeeCost && <PaidReport from={from} to={to} onExport={setPaidExport} />}
 
       {/* RECEIVABLES */}
       {!loading && tab === 'receivables' && data && (
@@ -355,7 +364,7 @@ export default function Reports() {
         <div className="table-container">
           <table>
             <thead>
-              <tr><th>Номер</th><th>Клиент</th><th>Статус</th><th>Вид</th><th>Дата</th><th className="text-right">м²</th><th className="text-right">Цена с ДДС</th><th className="text-right">Себест.</th><th className="text-right">Марж</th></tr>
+              <tr><th>Номер</th><th>Клиент</th><th>Статус</th><th>Вид</th><th>Дата</th><th className="text-right">м²</th><th className="text-right">Цена с ДДС</th>{canSeeCost && <th className="text-right">Себест.</th>}{canSeeCost && <th className="text-right">Марж</th>}</tr>
             </thead>
             <tbody>
               {data.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-muted">Няма данни</td></tr>}
@@ -368,10 +377,12 @@ export default function Reports() {
                   <td className="text-muted whitespace-nowrap">{dateBg(o.created_at, 'd MMM yy')}</td>
                   <td className="text-right text-muted">{+o.m2 ? num(o.m2, 2) : '—'}</td>
                   <td className="text-right text-green-400">{eur(o.sale_price)}</td>
-                  <td className="text-right text-muted">{eur(o.total_cost)}</td>
-                  <td className={`text-right ${o.margin_pct > 0 ? 'text-green-400 font-medium' : o.margin_pct !== null ? 'text-danger' : 'text-muted'}`}>
-                    {o.margin_pct !== null ? `${o.margin_pct}%` : '—'}
-                  </td>
+                  {canSeeCost && <td className="text-right text-muted">{eur(o.total_cost)}</td>}
+                  {canSeeCost && (
+                    <td className={`text-right ${o.margin_pct > 0 ? 'text-green-400 font-medium' : o.margin_pct !== null && o.margin_pct !== undefined ? 'text-danger' : 'text-muted'}`}>
+                      {o.margin_pct !== null && o.margin_pct !== undefined ? `${o.margin_pct}%` : '—'}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

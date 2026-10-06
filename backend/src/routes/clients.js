@@ -165,6 +165,15 @@ router.get('/:id', async (req, res) => {
   res.json({ ...rows[0], stats: s, orders: stripMoney(req.user, orders.rows) });
 });
 
+// GET /api/clients/:id/refs — the client's previous references (their order numbers, sites, stages), newest first
+router.get('/:id/refs', roleCheck('admin', 'office'), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT client_ref, COUNT(*)::int AS orders, MAX(created_at) AS last_used
+     FROM orders WHERE client_id=$1 AND client_ref IS NOT NULL
+     GROUP BY client_ref ORDER BY MAX(created_at) DESC LIMIT 50`, [req.params.id]);
+  res.json(rows);
+});
+
 // GET /api/clients/:id/prices — what this client has paid per product (last price, how often, range)
 router.get('/:id/prices', roleCheck('admin', 'office'), async (req, res) => {
   const { rows } = await pool.query(

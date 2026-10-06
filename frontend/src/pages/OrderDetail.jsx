@@ -17,6 +17,7 @@ import OrderItems from '../components/order/OrderItems'
 import PaymentCard from '../components/order/PaymentCard'
 import EditOrderModal from '../components/order/EditOrderModal'
 import HandoverDialog from '../components/order/HandoverDialog'
+import OrderExpenses from '../components/order/OrderExpenses'
 import useOptions from '../hooks/useOptions'
 import {
   TYPE_LABELS, SOURCE_LABELS, FULFILLMENT_LABELS, INSTALL_LABELS, CATEGORY_LABELS, STATUS_HINTS, STATUS_ACTIONS,
@@ -35,51 +36,52 @@ const NATURAL_NEXT = {
 // ─── Cost Card ────────────────────────────────────────────────────────────────
 const fmt = v => (v && Number(v) > 0) ? `${Number(v).toFixed(2)} €` : '—'
 
-function CostCard({ costs, salePrice, vatPct }) {
+// Owner-only: cost, extra expenses and profit of the order (sale price is with VAT, costs without)
+function CostCard({ orderId, costs, salePrice, vatPct }) {
+  const [expenses, setExpenses] = useState(0)
+  useEffect(() => {
+    api.get(`/orders/${orderId}/expenses`).then(r => setExpenses(r.data.reduce((s, e) => s + +e.amount, 0))).catch(() => {})
+  }, [orderId])
   if (!costs) return null
-  const hasCosts = Number(costs.total_cost) > 0
-  // Sale price is with VAT, costs are without — compare like with like
+  const cost = Number(costs.total_cost) || 0
   const net = salePrice ? Number(salePrice) / (1 + (Number(vatPct) || 20) / 100) : null
-  const margin = net && hasCosts ? net - Number(costs.total_cost) : null
-  const marginPct = margin !== null ? (margin / net * 100).toFixed(1) : null
+  const profit = net !== null && (cost > 0 || expenses > 0) ? net - cost - expenses : null
+  const pct = profit !== null && net ? (profit / net * 100).toFixed(1) : null
 
   return (
     <div className="card">
-      <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Себестойност</h3>
-      <div className="space-y-2 text-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Себестойност и печалба</h3>
+        <span className="text-[11px] text-muted">само за собственика</span>
+      </div>
+      <div className="space-y-1.5 text-sm">
+        {net !== null && (
+          <div className="flex justify-between">
+            <span className="text-muted">Продажна цена без ДДС</span>
+            <span className="text-white font-medium">{net.toFixed(2)} €</span>
+          </div>
+        )}
         <div className="flex justify-between">
-          <span className="text-muted">Материали</span>
-          <span className="text-white font-medium">{fmt(costs.material_cost)}</span>
+          <span className="text-muted">Себестойност</span>
+          <span className={cost > 0 ? 'text-white' : 'text-muted'}>{cost > 0 ? `${cost.toFixed(2)} €` : 'не е въведена'}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-muted">Труд</span>
-          <span className="text-white font-medium">{fmt(costs.labor_cost)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted">Машини</span>
-          <span className="text-white font-medium">{fmt(costs.machine_cost)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted">Режийни {costs.overhead_pct ? `(${costs.overhead_pct}%)` : ''}</span>
-          <span className="text-white font-medium">{fmt(costs.overhead_cost)}</span>
-        </div>
-        <div className="border-t border-border pt-2 flex justify-between font-bold">
-          <span className="text-gray-200">Себестойност</span>
-          <span className={hasCosts ? 'text-white' : 'text-muted'}>{hasCosts ? `${Number(costs.total_cost).toFixed(2)} €` : 'Не е изчислена'}</span>
-        </div>
-        {net && (
-          <>
-            <div className="flex justify-between">
-              <span className="text-muted">Продажна цена без ДДС</span>
-              <span className="text-white font-medium">{net.toFixed(2)} €</span>
+        {cost > 0 && (
+          <details className="text-xs text-muted">
+            <summary className="cursor-pointer hover:text-white">разбивка</summary>
+            <div className="mt-1 space-y-0.5 pl-2">
+              <div className="flex justify-between"><span>Материали</span><span>{fmt(costs.material_cost)}</span></div>
+              <div className="flex justify-between"><span>Труд</span><span>{fmt(costs.labor_cost)}</span></div>
+              <div className="flex justify-between"><span>Машини</span><span>{fmt(costs.machine_cost)}</span></div>
+              <div className="flex justify-between"><span>Режийни {costs.overhead_pct ? `(${costs.overhead_pct}%)` : ''}</span><span>{fmt(costs.overhead_cost)}</span></div>
             </div>
-            {margin !== null && (
-              <div className={`flex justify-between font-bold border-t border-border pt-2 ${margin > 0 ? 'text-green-400' : 'text-danger'}`}>
-                <span>Марж</span>
-                <span>{margin.toFixed(2)} € ({marginPct}%)</span>
-              </div>
-            )}
-          </>
+          </details>
+        )}
+        <OrderExpenses orderId={orderId} onChange={setExpenses} />
+        {profit !== null && (
+          <div className={`flex justify-between font-bold border-t border-border pt-2 ${profit > 0 ? 'text-green-400' : 'text-danger'}`}>
+            <span>Печалба</span>
+            <span>{profit.toFixed(2)} € ({pct}%)</span>
+          </div>
         )}
       </div>
     </div>
@@ -396,7 +398,7 @@ function AddStageInline({ orderId, onAdded }) {
 export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user, isAdmin, isOffice, isProduction, canSeePrices } = useAuth()
+  const { user, isAdmin, isOffice, isProduction, canSeePrices, canSeeCost } = useAuth()
   const settings = useSettings()
   const { label: optLabel } = useOptions()
   const [history, setHistory] = useState([])
@@ -535,6 +537,9 @@ export default function OrderDetail() {
             {order.client_name} · {TYPE_LABELS[order.order_type] || order.order_type} · {dateBg(order.created_at)} · {order.created_by_name}
           </p>
           <p className="text-xs text-muted mt-0.5">{STATUS_HINTS[order.status]}</p>
+          {canSeePrices && +order.sale_price > 0 && (
+            <p className="mt-2 text-2xl font-bold text-white">{eur(order.sale_price)} <span className="text-xs font-normal text-muted">с ДДС</span></p>
+          )}
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
         {/* Main action: move the order forward */}
@@ -949,7 +954,7 @@ export default function OrderDetail() {
             </div>
           )}
 
-          {canSeePrices && <CostCard costs={order.costs} salePrice={order.sale_price} vatPct={settings.vat_pct} />}
+          {canSeeCost && <CostCard orderId={order.id} costs={order.costs} salePrice={order.sale_price} vatPct={settings.vat_pct} />}
 
           <div className="card text-sm space-y-2">
             <p className="text-muted text-xs uppercase tracking-wide">Информация</p>

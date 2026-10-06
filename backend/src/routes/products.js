@@ -2,7 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
-const { stripMoney } = require('../utils/financial');
+const { stripMoney, stripCost } = require('../utils/financial');
 
 const router = express.Router();
 router.use(auth);
@@ -25,7 +25,8 @@ router.get('/', async (req, res) => {
     `SELECT * FROM product_templates ${conds.length ? 'WHERE ' + conds.join(' AND ') : ''}
      ORDER BY category NULLS LAST, sort_order, name`, params);
   // Prices are for office/admin only
-  res.json(stripMoney(req.user, rows, ['unit_price', 'sale_price']));
+  // Selling prices for admin/office; cost price (unit_price) for admin only
+  res.json(stripCost(req.user, stripMoney(req.user, rows, ['unit_price', 'sale_price']), ['unit_price']));
 });
 
 const FIELDS = {
