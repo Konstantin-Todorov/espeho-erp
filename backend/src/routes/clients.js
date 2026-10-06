@@ -54,7 +54,7 @@ router.get('/:id', async (req, res) => {
               COALESCE(SUM(sale_price) FILTER (WHERE status = 'ДОСТАВЕНА' AND order_category = 'нормална'),0)::numeric(12,2) AS total_revenue,
               COALESCE(AVG(sale_price) FILTER (WHERE status = 'ДОСТАВЕНА' AND order_category = 'нормална' AND sale_price > 0),0)::numeric(12,2) AS avg_order_value,
               COALESCE(SUM(sale_price - COALESCE((SELECT SUM(amount) FROM payments p WHERE p.order_id = o.id),0))
-                FILTER (WHERE payment_status <> 'платена' AND status <> 'ОТКАЗАНА' AND order_category = 'нормална'),0)::numeric(12,2) AS unpaid_amount,
+                FILTER (WHERE payment_status <> 'платена' AND status = 'ДОСТАВЕНА' AND order_category = 'нормална'),0)::numeric(12,2) AS unpaid_amount,
               MIN(created_at) AS first_order_at, MAX(created_at) AS last_order_at
        FROM orders o WHERE client_id=$1`, [req.params.id]),
   ]);
@@ -62,6 +62,21 @@ router.get('/:id', async (req, res) => {
   const s = stats.rows[0];
   if (!canSeeMoney(req.user)) { delete s.total_revenue; delete s.avg_order_value; delete s.unpaid_amount; }
   res.json({ ...rows[0], stats: s, orders: stripMoney(req.user, orders.rows) });
+});
+
+// GET /api/clients/:id/prices — what this client has paid per product (last price, how often, range)
+router.get('/:id/prices', roleCheck('admin', 'office'), async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (UPPER(oi.product_desc), oi.uom)
+            oi.product_desc, oi.uom, oi.unit_price AS last_price, o.created_at AS last_date,
+            o.id AS last_order_id, o.external_ref, o.order_number,
+            COUNT(*) OVER (PARTITION BY UPPER(oi.product_desc), oi.uom) AS times,
+            MIN(oi.unit_price) OVER (PARTITION BY UPPER(oi.product_desc), oi.uom) AS min_price,
+            MAX(oi.unit_price) OVER (PARTITION BY UPPER(oi.product_desc), oi.uom) AS max_price
+     FROM order_items oi JOIN orders o ON o.id = oi.order_id
+     WHERE o.client_id = $1 AND oi.unit_price > 0 AND o.order_category = 'нормална'
+     ORDER BY UPPER(oi.product_desc), oi.uom, o.created_at DESC`, [req.params.id]);
+  res.json(rows.sort((a, b) => b.times - a.times || new Date(b.last_date) - new Date(a.last_date)));
 });
 
 // POST /api/clients

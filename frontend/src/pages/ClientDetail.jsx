@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { OrderStatusBadge, PaymentStatusBadge, CategoryBadge } from '../components/ui/StatusBadge'
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
+import ClientPrices from '../components/ClientPrices'
 import toast from 'react-hot-toast'
 import { SOURCE_LABELS, TYPE_LABELS, orderNo, eur, num, dateBg } from '../utils/labels'
 import { Check, Pencil, X } from 'lucide-react'
@@ -360,6 +361,8 @@ export default function ClientDetail() {
               )}
             </div>
           </div>
+
+          {canSeePrices && <ClientPrices clientId={client.id} />}
 
           {/* Quick info */}
           <div className="card text-sm space-y-3">

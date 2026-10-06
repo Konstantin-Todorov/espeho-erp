@@ -121,10 +121,10 @@ function AdminDashboard() {
             <StatCard to="/reports" label="Произведени м²" value={num(ytd.m2, 0)} color="text-accent"
               sub={+ytd.m2 > 0 ? `≈ ${eur(+ytd.revenue / +ytd.m2, { dash: false })} на м²` : ''}
               tooltip="Квадратура на предадените поръчки" icon={Grid2x2} />
-            <StatCard to="/orders?tab=unpaid" label="Неплатени" value={eurRound(data.receivables?.amount)}
+            <StatCard to="/orders?tab=unpaid" label="Дължат клиенти" value={eurRound(data.receivables?.amount)}
               sub={`${num(data.receivables?.count, 0)} поръчки`}
               color={+data.receivables?.amount > 0 ? 'text-yellow-400' : 'text-muted'}
-              tooltip="Поръчки (без отказаните), които не са платени изцяло" icon={Wallet} />
+              tooltip="Предадени на клиента, но не платени изцяло" icon={Wallet} />
           </div>
         </>
       )}

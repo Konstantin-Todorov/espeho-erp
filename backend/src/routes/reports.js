@@ -91,7 +91,7 @@ router.get('/dashboard', async (req, res) => {
       SELECT COUNT(*)::int AS count,
              COALESCE(SUM(o.sale_price - COALESCE((SELECT SUM(amount) FROM payments p WHERE p.order_id = o.id),0)),0)::numeric(12,2) AS amount
       FROM orders o
-      WHERE o.payment_status <> 'платена' AND o.status <> 'ОТКАЗАНА' AND o.order_category = 'нормална'
+      WHERE o.payment_status <> 'платена' AND o.status = 'ДОСТАВЕНА' AND o.order_category = 'нормална'
         AND COALESCE(o.sale_price,0) > 0`),
   ]);
 
