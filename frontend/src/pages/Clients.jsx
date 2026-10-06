@@ -5,7 +5,10 @@ import { useAuth } from '../context/AuthContext'
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
 import toast from 'react-hot-toast'
-import { SOURCE_LABELS, dateBg, num } from '../utils/labels'
+import { dateBg, num } from '../utils/labels'
+import RegistryLookup from '../components/RegistryLookup'
+import OptionSelect from '../components/ui/OptionSelect'
+import { Building2 } from 'lucide-react'
 
 const PAGE_SIZE = 50
 
@@ -17,6 +20,7 @@ export default function Clients() {
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('orders')
+  const [missing, setMissing] = useState('')
   const [page, setPage] = useState(1)
   const { isOffice } = useAuth()
   const navigate = useNavigate()
@@ -35,12 +39,12 @@ export default function Clients() {
   const fetchClients = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await api.get('/clients', { params: { search: query || undefined, page, limit: PAGE_SIZE, sort } })
+      const { data } = await api.get('/clients', { params: { search: query || undefined, page, limit: PAGE_SIZE, sort, missing: missing || undefined } })
       setClients(data.data)
       setTotal(data.total)
     } catch { toast.error('Грешка при зареждане') }
     finally { setLoading(false) }
-  }, [query, page, sort])
+  }, [query, page, sort, missing])
 
   useEffect(() => { fetchClients() }, [fetchClients])
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -64,6 +68,12 @@ export default function Clients() {
           <option value="orders">Най-много поръчки</option>
           <option value="recent">Последна поръчка</option>
           <option value="name">По азбучен ред</option>
+        </select>
+        <select className="select w-auto" value={missing} onChange={e => { setMissing(e.target.value); setPage(1) }}
+          title="Клиенти с непълни данни — отворете ги и натиснете „Търговски регистър“">
+          <option value="">Всички клиенти</option>
+          <option value="eik">Без ЕИК (за попълване)</option>
+          <option value="phone">Без телефон</option>
         </select>
       </div>
 
@@ -109,6 +119,7 @@ export default function Clients() {
 function CreateClientModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState({ name:'', phone:'', email:'', address:'', city:'', eik:'', source:'office', notes:'' })
   const [loading, setLoading] = useState(false)
+  const [lookup, setLookup] = useState(false)
 
   const handleSubmit = async e => {
     e.preventDefault()
@@ -126,8 +137,13 @@ function CreateClientModal({ open, onClose, onCreated }) {
     <Modal open={open} onClose={onClose} title="Нов клиент" size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="label">Наименование *</label>
+          <div className="flex items-center justify-between">
+            <label className="label">Наименование *</label>
+            <button type="button" className="text-xs text-accent hover:underline inline-flex items-center gap-1 mb-1"
+              onClick={() => setLookup(true)}><Building2 className="w-3.5 h-3.5" /> Попълни от Търговския регистър</button>
+          </div>
           <input className="input" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} required placeholder="Фирма ЕООД / Иванов" />
+          {form.legal_name && <p className="text-xs text-muted mt-1">{form.legal_name}{form.mol ? ` · МОЛ ${form.mol}` : ''}{form.vat_number ? ` · ${form.vat_number}` : ''}</p>}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -149,9 +165,7 @@ function CreateClientModal({ open, onClose, onCreated }) {
         </div>
         <div>
           <label className="label">Откъде научи за нас</label>
-          <select className="select" value={form.source} onChange={e=>setForm(f=>({...f,source:e.target.value}))}>
-            {Object.entries(SOURCE_LABELS).map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
+          <OptionSelect listKey="source" value={form.source} onChange={v=>setForm(f=>({...f,source:v}))} />
         </div>
         <div>
           <label className="label">Адрес</label>
@@ -162,6 +176,8 @@ function CreateClientModal({ open, onClose, onCreated }) {
           <button type="submit" className="btn-primary" disabled={loading}>Създай</button>
         </div>
       </form>
+      <RegistryLookup open={lookup} onClose={() => setLookup(false)} client={{ ...form, name: form.name }}
+        onApply={async body => setForm(f => ({ ...f, ...body, name: f.name || body.legal_name || f.name }))} />
     </Modal>
   )
 }

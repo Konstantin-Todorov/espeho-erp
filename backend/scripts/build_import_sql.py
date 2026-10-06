@@ -173,7 +173,8 @@ sql = [f"""-- 012: complete import of the office spreadsheet (ПОРЪЧКИ 202
 -- are matched by their original number and corrected in place; orders created in the ERP are untouched.
 
 CREATE TEMP TABLE _imp_o (seq INT PRIMARY KEY, ref TEXT, d DATE, deadline DATE, client TEXT, fulfillment TEXT,
-  urgent BOOLEAN, otype TEXT, sale NUMERIC, cost NUMERIC, notes TEXT, category TEXT, order_id UUID) ON COMMIT DROP;
+  urgent BOOLEAN, otype TEXT, sale NUMERIC, cost NUMERIC, notes TEXT, category TEXT, order_id UUID,
+  client_id UUID, protected BOOLEAN NOT NULL DEFAULT false) ON COMMIT DROP;
 CREATE TEMP TABLE _imp_i (seq INT, sort INT, ptype TEXT, descr TEXT, note TEXT, thickness NUMERIC, w NUMERIC,
   h NUMERIC, qty NUMERIC, area NUMERIC, uom TEXT, billed NUMERIC, price NUMERIC, total NUMERIC, cost NUMERIC) ON COMMIT DROP;
 """]
@@ -199,12 +200,21 @@ UPDATE clients c SET name = UPPER(REGEXP_REPLACE(TRIM(c.name), '\s+', ' ', 'g'))
    AND NOT EXISTS (SELECT 1 FROM clients c2 WHERE c2.id <> c.id
                     AND c2.name = UPPER(REGEXP_REPLACE(TRIM(c.name), '\s+', ' ', 'g')));
 
--- 2. Create clients that do not exist yet
+-- 2. Resolve each spreadsheet name to a client: known aliases first (merged/renamed clients),
+--    then the current name; create the clients that still don't exist
+UPDATE _imp_o i SET client_id = a.client_id FROM client_aliases a WHERE a.name_key = i.client;
+UPDATE _imp_o i SET client_id = (SELECT c.id FROM clients c
+                                  WHERE UPPER(REGEXP_REPLACE(TRIM(c.name), '\s+', ' ', 'g')) = i.client
+                                  ORDER BY c.created_at LIMIT 1)
+ WHERE i.client_id IS NULL;
 INSERT INTO clients (name, source, notes)
 SELECT DISTINCT i.client, 'office',
        CASE WHEN i.client = 'КЛИЕНТ НА МЯСТО (БЕЗ ИМЕ)' THEN 'Поръчки без име на клиент в таблицата' END
-  FROM _imp_o i
- WHERE NOT EXISTS (SELECT 1 FROM clients c WHERE UPPER(REGEXP_REPLACE(TRIM(c.name), '\s+', ' ', 'g')) = i.client);
+  FROM _imp_o i WHERE i.client_id IS NULL;
+UPDATE _imp_o i SET client_id = (SELECT c.id FROM clients c
+                                  WHERE UPPER(REGEXP_REPLACE(TRIM(c.name), '\s+', ' ', 'g')) = i.client
+                                  ORDER BY c.created_at LIMIT 1)
+ WHERE i.client_id IS NULL;
 
 -- 3. Match orders imported earlier by original number (n-th occurrence ↔ n-th occurrence)
 WITH ex AS (
@@ -215,25 +225,32 @@ im AS (
 UPDATE _imp_o i SET order_id = ex.id FROM im JOIN ex ON ex.external_ref = im.ref AND ex.rn = im.rn
  WHERE i.seq = im.seq;
 
+-- Orders the office has already worked with in the ERP (status change, edit, payment) are left untouched
+UPDATE _imp_o i SET protected = true
+  FROM orders o
+ WHERE o.id = i.order_id
+   AND (o.updated_by IS NOT NULL
+        OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id)
+        OR EXISTS (SELECT 1 FROM audit_log a WHERE a.table_name = 'orders' AND a.record_id = o.id)
+        OR EXISTS (SELECT 1 FROM order_comments m WHERE m.order_id = o.id));
+
 -- 4. Correct the matched orders in place (keep their id / internal number / comments / files)
 UPDATE orders o SET
-  client_id = (SELECT c.id FROM clients c WHERE UPPER(REGEXP_REPLACE(TRIM(c.name), '\s+', ' ', 'g')) = i.client
-                ORDER BY c.created_at LIMIT 1),
+  client_id = i.client_id,
   order_type = i.otype, order_category = i.category, sale_price = i.sale, notes = i.notes,
   deadline = i.deadline, is_urgent = i.urgent, fulfillment = i.fulfillment,
   installation_status = CASE WHEN i.fulfillment = 'монтаж' THEN 'МОНТИРАНА' END,
   created_at = i.d + TIME '10:00', delivered_at = COALESCE(i.deadline, i.d) + TIME '17:00'
-FROM _imp_o i WHERE i.order_id = o.id;
+FROM _imp_o i WHERE i.order_id = o.id AND NOT i.protected;
 
-DELETE FROM order_items WHERE order_id IN (SELECT order_id FROM _imp_o WHERE order_id IS NOT NULL);
+DELETE FROM order_items WHERE order_id IN (SELECT order_id FROM _imp_o WHERE order_id IS NOT NULL AND NOT protected);
 
 -- 5. Insert the orders that were missing
 WITH ins AS (
   INSERT INTO orders (client_id, order_type, order_category, status, sale_price, notes, source, created_by,
                       deadline, is_urgent, fulfillment, installation_status, payment_status, external_ref,
                       created_at, updated_at, delivered_at)
-  SELECT (SELECT c.id FROM clients c WHERE UPPER(REGEXP_REPLACE(TRIM(c.name), '\s+', ' ', 'g')) = i.client
-           ORDER BY c.created_at LIMIT 1),
+  SELECT i.client_id,
          i.otype, i.category, 'ДОСТАВЕНА', i.sale, i.notes, 'office',
          (SELECT id FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1),
          i.deadline, i.urgent, i.fulfillment, CASE WHEN i.fulfillment = 'монтаж' THEN 'МОНТИРАНА' END,
@@ -250,11 +267,12 @@ INSERT INTO order_items (order_id, product_type, product_desc, notes, thickness_
                          area_m2, uom, billed_qty, unit_price, line_total, line_cost, sort_order)
 SELECT i.order_id, it.ptype, it.descr, it.note, it.thickness, it.w, it.h, it.qty,
        it.area, it.uom, it.billed, it.price, it.total, it.cost, it.sort
-  FROM _imp_i it JOIN _imp_o i ON i.seq = it.seq;
+  FROM _imp_i it JOIN _imp_o i ON i.seq = it.seq
+ WHERE NOT i.protected;
 
 -- 7. Cost cards: spreadsheet cost, no extra overhead
 INSERT INTO order_costs (order_id, material_cost, overhead_pct)
-SELECT order_id, cost, 0 FROM _imp_o
+SELECT order_id, cost, 0 FROM _imp_o WHERE NOT protected
 ON CONFLICT (order_id) DO UPDATE SET material_cost = EXCLUDED.material_cost, overhead_pct = 0, updated_at = NOW();
 
 -- 8. Remove clients from the first import that no longer have any orders or quotations
@@ -263,7 +281,8 @@ DELETE FROM clients c
  WHERE c.created_at <= (SELECT run_at FROM migrations WHERE filename = '010_import_real_data.sql')
    AND c.phone IS NULL AND c.email IS NULL AND c.eik IS NULL
    AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.client_id = c.id)
-   AND NOT EXISTS (SELECT 1 FROM quotations q WHERE q.client_id = c.id);
+   AND NOT EXISTS (SELECT 1 FROM quotations q WHERE q.client_id = c.id)
+   AND NOT EXISTS (SELECT 1 FROM client_aliases a WHERE a.client_id = c.id);
 
 SELECT setval('orders_order_number_seq', (SELECT MAX(order_number) FROM orders));
 """)

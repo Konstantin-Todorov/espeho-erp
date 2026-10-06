@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import Modal from '../ui/Modal'
 import ClientPicker from '../ui/ClientPicker'
 import OptionSelect from '../ui/OptionSelect'
+import OrderPicker from '../ui/OrderPicker'
 import {
   TYPE_LABELS, TYPE_OPTIONS, CATEGORY_LABELS, CATEGORY_OPTIONS, FULFILLMENT_LABELS, FULFILLMENT_OPTIONS,
   INSTALL_LABELS,
@@ -23,6 +24,7 @@ export default function EditOrderModal({ open, onClose, order, onSaved }) {
       installation_status: order.installation_status || '', order_type: order.order_type,
       order_category: order.order_category, source: order.source || 'office', external_ref: order.external_ref || '',
       sale_price: order.sale_price ?? '',
+      related_order: order.related_original || null,
     })
   }, [open, order?.id])
 
@@ -34,9 +36,9 @@ export default function EditOrderModal({ open, onClose, order, onSaved }) {
     if (!f.client) return toast.error('Изберете клиент')
     setSaving(true)
     try {
-      const { client, ...rest } = f
+      const { client, related_order, ...rest } = f
       await api.patch(`/orders/${order.id}`, {
-        ...rest, client_id: client.id,
+        ...rest, client_id: client.id, related_order_id: related_order?.id || null,
         deadline: f.deadline || null, sale_price: f.sale_price === '' ? null : f.sale_price,
         installation_status: f.installation_status || null,
       })
@@ -97,6 +99,13 @@ export default function EditOrderModal({ open, onClose, order, onSaved }) {
               {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
             </select>
           </label>
+          {f.order_category === 'гаранция' && (
+            <div className="sm:col-span-2">
+              <span className="label">Рекламация по поръчка</span>
+              <OrderPicker value={f.related_order?.id} selected={f.related_order} params={{}}
+                onChange={o => set({ related_order: o })} placeholder="Номер на оригиналната поръчка…" />
+            </div>
+          )}
           <label>
             <span className="label">Откъде дойде</span>
             <OptionSelect listKey="source" value={f.source} onChange={v => set({ source: v })} />

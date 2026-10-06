@@ -587,6 +587,24 @@ export default function OrderDetail() {
         </div>
       </div>
 
+      {(order.related_original || order.related_claims?.length > 0) && (
+        <div className="card mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm border-purple-500/30">
+          <Link2 className="w-4 h-4 text-purple-400" />
+          {order.related_original && (
+            <span className="text-gray-300">Рекламация / преработка по поръчка{' '}
+              <Link to={`/orders/${order.related_original.id}`} className="text-accent font-semibold hover:underline">{orderNo(order.related_original)}</Link>
+            </span>
+          )}
+          {order.related_claims?.length > 0 && (
+            <span className="text-gray-300">Рекламации по тази поръчка:{' '}
+              {order.related_claims.map((c, i) => (
+                <span key={c.id}>{i > 0 && ', '}<Link to={`/orders/${c.id}`} className="text-accent font-semibold hover:underline">{orderNo(c)}</Link></span>
+              ))}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main content */}
         <div className="lg:col-span-2 space-y-4">

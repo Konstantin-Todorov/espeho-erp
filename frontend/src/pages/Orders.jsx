@@ -8,6 +8,7 @@ import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
 import ClientPicker from '../components/ui/ClientPicker'
 import OptionSelect from '../components/ui/OptionSelect'
+import OrderPicker from '../components/ui/OrderPicker'
 import useSettings from '../hooks/useSettings'
 import { priceLine, sumLines } from '../utils/pricing'
 import {
@@ -159,9 +160,10 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
     if (!lines.length) return toast.error('Добавете поне един ред')
     setLoading(true)
     try {
-      const { client, ...rest } = form
+      const { client, related_order, ...rest } = form
       const res = await api.post('/orders', {
         ...rest, client_id: client.id, items: lines,
+        related_order_id: form.order_category === 'гаранция' ? related_order?.id || null : null,
         sale_price: form.sale_price === '' ? null : form.sale_price,
         initial_status: initialStatus,
       })
@@ -314,6 +316,14 @@ function CreateOrderModal({ open, onClose, onCreated, presetClient }) {
                 </select>
                 <p className="text-xs text-muted mt-1">Гаранция/вътрешна/мостра не влизат в приходите.</p>
               </div>
+              {form.order_category === 'гаранция' && (
+                <div className="md:col-span-2">
+                  <p className="label">Рекламация по поръчка</p>
+                  <OrderPicker value={form.related_order?.id} selected={form.related_order} params={{}}
+                    onChange={o => set({ related_order: o })} placeholder="Номер на оригиналната поръчка или клиент…" />
+                  <p className="text-xs text-muted mt-1">Свързва преработката с оригинала — вижда се и в двете поръчки.</p>
+                </div>
+              )}
               <div>
                 <label className="label" htmlFor="o-src">Откъде дойде поръчката</label>
                 <OptionSelect id="o-src" listKey="source" value={form.source} onChange={v => set({ source: v })} />

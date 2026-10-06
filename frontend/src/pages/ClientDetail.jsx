@@ -6,6 +6,9 @@ import { OrderStatusBadge, PaymentStatusBadge, CategoryBadge } from '../componen
 import { PageLoader } from '../components/ui/Spinner'
 import Modal from '../components/ui/Modal'
 import ClientPrices from '../components/ClientPrices'
+import RegistryLookup from '../components/RegistryLookup'
+import useOptions from '../hooks/useOptions'
+import { Building2, BadgeCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { SOURCE_LABELS, TYPE_LABELS, orderNo, eur, num, dateBg } from '../utils/labels'
 import { Check, Pencil, X } from 'lucide-react'
@@ -181,6 +184,8 @@ export default function ClientDetail() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [mergeOpen, setMergeOpen] = useState(false)
+  const [registryOpen, setRegistryOpen] = useState(false)
+  const { lists: optLists, label: optLabel } = useOptions()
 
   const fetchClient = async () => {
     try {
@@ -201,7 +206,7 @@ export default function ClientDetail() {
   const patchField = async (field, value) => {
     try {
       const { data } = await api.patch(`/clients/${id}`, { [field]: value })
-      setClient(data)
+      setClient(c => ({ ...c, ...data }))
       toast.success('Запазено')
     } catch (err) {
       toast.error(err.response?.data?.error || 'Грешка при запазване')
@@ -229,11 +234,19 @@ export default function ClientDetail() {
             {client.city && `${client.city} · `}
             {client.phone && <a href={`tel:${client.phone}`} className="hover:text-accent">{client.phone}</a>}
             {!client.active && <span className="ml-2 badge bg-red-500/20 text-red-400">Неактивен</span>}
+            {client.registry_checked_at && (
+              <span className="ml-2 badge bg-green-500/15 text-green-400 inline-flex items-center gap-1" title={`Сверен с Търговския регистър на ${dateBg(client.registry_checked_at)}`}>
+                <BadgeCheck className="w-3.5 h-3.5" /> Търговски регистър
+              </span>
+            )}
           </p>
         </div>
         {isOffice && (
           <div className="flex gap-2 flex-wrap">
             <button className="btn-primary" onClick={() => navigate(`/orders?new=1&client=${client.id}`)}>+ Нова поръчка</button>
+            <button className="btn-secondary text-sm" onClick={() => setRegistryOpen(true)} title="Търси фирмата в Търговския регистър и попълни ЕИК, адрес, МОЛ…">
+              <Building2 className="w-4 h-4" /> Търговски регистър
+            </button>
             <button className="btn-secondary text-sm" onClick={() => setMergeOpen(true)} title="Обедини с дублиран запис на същия клиент">Обедини дубликати</button>
             <button className="btn-secondary text-sm" onClick={() => patchField('active', !client.active)}>
               {client.active ? 'Деактивирай' : 'Активирай'}
@@ -259,10 +272,18 @@ export default function ClientDetail() {
                 onSave={v => patchField('eik', v)} />
               <InlineEdit label="МОЛ" value={client.mol}
                 onSave={v => patchField('mol', v)} />
+              <InlineEdit label="ДДС №" value={client.vat_number}
+                onSave={v => patchField('vat_number', v)} />
+              <InlineEdit label="Сайт" value={client.website}
+                onSave={v => patchField('website', v)} />
+              <div className="sm:col-span-2">
+                <InlineEdit label="Официално наименование" value={client.legal_name}
+                  onSave={v => patchField('legal_name', v)} />
+              </div>
               <InlineSelect
                 label="Откъде научи за нас"
                 value={client.source}
-                options={Object.entries(SOURCE_LABELS)}
+                options={(optLists.source || []).map(o => [o.value, o.label])}
                 onSave={v => patchField('source', v)}
               />
               <div className="sm:col-span-2">
@@ -382,7 +403,7 @@ export default function ClientDetail() {
               )}
               <div className="flex justify-between">
                 <span className="text-muted">Откъде</span>
-                <span className="text-white">{SOURCE_LABELS[client.source] || client.source}</span>
+                <span className="text-white">{optLabel('source', client.source, SOURCE_LABELS)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Първа поръчка</span>
@@ -396,6 +417,8 @@ export default function ClientDetail() {
           </div>
         </div>
       </div>
+      <RegistryLookup open={registryOpen} onClose={() => setRegistryOpen(false)} client={client}
+        onApply={async body => { const { data } = await api.patch(`/clients/${id}`, body); setClient(c => ({ ...c, ...data })) }} />
       {mergeOpen && <MergeModal open={mergeOpen} onClose={() => setMergeOpen(false)} client={client} onMerged={fetchClient} />}
     </div>
   )

@@ -228,7 +228,7 @@ router.get('/:id', async (req, res) => {
   if (!orderQ.rows[0]) return res.status(404).json({ error: 'Поръчката не е намерена' });
 
   const id = req.params.id;
-  const [items, stages, costs, defects, files, labor, payments] = await Promise.all([
+  const [items, stages, costs, defects, files, labor, payments, related] = await Promise.all([
     pool.query('SELECT * FROM order_items WHERE order_id=$1 ORDER BY sort_order, created_at', [id]),
     pool.query(`SELECT ps.*, u.name AS worker_name, m.name AS machine_name
                 FROM production_stages ps
@@ -254,6 +254,11 @@ router.get('/:id', async (req, res) => {
                     LEFT JOIN users u ON u.id = p.created_by
                     WHERE p.order_id=$1 ORDER BY p.paid_at, p.created_at`, [id])
       : { rows: [] },
+    // The original order (if this is a complaint/rework) and the complaints raised against this order
+    pool.query(`SELECT o.id, o.order_number, o.external_ref, o.status, o.order_category, o.created_at,
+                       (o.id = (SELECT related_order_id FROM orders WHERE id=$1)) AS is_original
+                FROM orders o WHERE o.id = (SELECT related_order_id FROM orders WHERE id=$1) OR o.related_order_id = $1
+                ORDER BY o.created_at`, [id]),
   ]);
 
   const order = orderQ.rows[0];
@@ -269,13 +274,15 @@ router.get('/:id', async (req, res) => {
     files: files.rows,
     labor: stripMoney(req.user, labor.rows, LABOR_FIELDS),
     payments: payments.rows,
+    related_original: related.rows.find(r => r.is_original) || null,
+    related_claims: related.rows.filter(r => !r.is_original),
   });
 });
 
 // ─── POST /api/orders ───────────────────────────────────────────────────────────
 router.post('/', roleCheck('admin', 'office'), async (req, res) => {
   const { client_id, order_type, order_category, deadline, is_urgent, sale_price, notes,
-          delivery_address, source, items, fulfillment, external_ref, initial_status } = req.body;
+          delivery_address, source, items, fulfillment, external_ref, initial_status, related_order_id } = req.body;
   if (!client_id || !order_type) {
     return res.status(400).json({ error: 'Клиентът и типът са задължителни' });
   }
@@ -287,13 +294,13 @@ router.post('/', roleCheck('admin', 'office'), async (req, res) => {
     const { rows: [order] } = await client.query(
       `INSERT INTO orders (client_id, order_type, order_category, deadline, is_urgent, sale_price, notes,
                            delivery_address, source, created_by, fulfillment, external_ref, status,
-                           installation_status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::order_status,$14) RETURNING *`,
+                           installation_status, related_order_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::order_status,$14,$15) RETURNING *`,
       [client_id, order_type, order_category || 'нормална', deadline || null, !!is_urgent,
        n(sale_price), notes || null, delivery_address || null, source || 'office', req.user.id,
        fulfillment || 'вземане', external_ref?.trim() || null,
        ['НОВА', 'МАТЕРИАЛИ', 'ПРОИЗВОДСТВО'].includes(initial_status) ? initial_status : 'НОВА',
-       fulfillment === 'монтаж' ? 'ЗА_МОНТАЖ' : null]
+       fulfillment === 'монтаж' ? 'ЗА_МОНТАЖ' : null, related_order_id || null]
     );
     const priced = await insertItems(client, order.id, Array.isArray(items) ? items : [], order_type, settings);
     // No manual price given → the order price is the sum of its lines
@@ -428,6 +435,7 @@ const EDITABLE = {
   delivery_address:    v => (v?.trim?.() ? v.trim() : null),
   source:              v => v || 'office',
   external_ref:        v => (v?.trim?.() ? v.trim() : null),
+  related_order_id:    v => v || null,
 };
 
 router.patch('/:id', roleCheck('admin', 'office'), async (req, res) => {

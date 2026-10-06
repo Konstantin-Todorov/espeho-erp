@@ -278,3 +278,25 @@ test('company details are text settings; defects keep responsibility', async () 
   assert.equal(d.status, 201);
   assert.equal(d.data.responsibility, 'доставчик');
 });
+
+test('complaint order links to the original; both sides see the link', async () => {
+  const c = await call('POST', '/orders', { role: 'office', body: { client_id: ids.client, order_type: 'стъклопакет',
+    order_category: 'гаранция', related_order_id: ids.order, items: [{ product_desc: 'Преработка', width: 500, height: 500, unit_price: 0 }] } });
+  assert.equal(c.status, 201);
+  const claim = await call('GET', `/orders/${c.data.id}`, { role: 'office' });
+  assert.equal(claim.data.related_original.id, ids.order);
+  const orig = await call('GET', `/orders/${ids.order}`, { role: 'office' });
+  assert.ok(orig.data.related_claims.some(x => x.id === c.data.id));
+});
+
+test('client merge remembers the old name; registry lookup validates ЕИК; demo warehouse gone', async () => {
+  const a = await call('POST', '/clients', { role: 'office', body: { name: 'Алиас Тест ООД' } });
+  const b = await call('POST', '/clients', { role: 'office', body: { name: 'АЛИАС ТЕСТ' } });
+  assert.equal((await call('POST', `/clients/${a.data.id}/merge`, { role: 'office', body: { from_ids: [b.data.id] } })).status, 200);
+  const { rows } = await pool.query(`SELECT client_id FROM client_aliases WHERE name_key='АЛИАС ТЕСТ'`);
+  assert.equal(rows[0].client_id, a.data.id);
+  assert.equal((await call('GET', '/clients/lookup/12ab', { role: 'office' })).status, 400);
+  assert.equal((await call('GET', '/clients/lookup?q=x', { role: 'production' })).status, 403);
+  const m = await call('GET', '/machines');
+  assert.equal(m.data.length, 0);
+});

@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 const { canSeeMoney, stripMoney } = require('../utils/financial');
+const registry = require('../utils/registry');
 
 const router = express.Router();
 router.use(auth);
@@ -13,11 +14,15 @@ router.get('/', async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 50));
   const params = [];
-  let where = '';
+  const conds = [];
   if (search?.trim()) {
     params.push(`%${search.trim()}%`);
-    where = `WHERE c.name ILIKE $1 OR c.phone ILIKE $1 OR c.email ILIKE $1 OR c.eik ILIKE $1 OR c.city ILIKE $1`;
+    conds.push(`(c.name ILIKE $1 OR c.phone ILIKE $1 OR c.email ILIKE $1 OR c.eik ILIKE $1 OR c.city ILIKE $1)`);
   }
+  // Clients whose card still needs completing
+  if (req.query.missing === 'eik') conds.push(`c.eik IS NULL AND c.name <> 'КЛИЕНТ НА МЯСТО (БЕЗ ИМЕ)'`);
+  if (req.query.missing === 'phone') conds.push(`c.phone IS NULL AND c.name <> 'КЛИЕНТ НА МЯСТО (БЕЗ ИМЕ)'`);
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
   const sort = req.query.sort === 'recent'
     ? 'last_order_at DESC NULLS LAST, c.name'
     : req.query.sort === 'orders' ? 'order_count DESC, c.name' : 'c.name';
@@ -33,6 +38,42 @@ router.get('/', async (req, res) => {
     pool.query(`SELECT COUNT(*)::int FROM clients c ${where}`, params),
   ]);
   res.json({ data: data.rows, total: count.rows[0].count, page, limit });
+});
+
+// GET /api/clients/lookup?q=ВАЛМАН | 123686958 — candidates from Търговски регистър (admin/office).
+// A name can match several companies, so each candidate carries city and manager to choose the right one.
+router.get('/lookup', roleCheck('admin', 'office'), async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (q.length < 2) return res.json([]);
+  try {
+    if (/^\d{9}(\d{4})?$/.test(q)) {
+      const one = await registry.getByEik(q);
+      return res.json(one ? [one] : []);
+    }
+    // The register rate-limits requests, so only the list is returned here; details load when one is picked
+    const norm = v => String(v || '').toUpperCase().replace(/["„“]/g, '').replace(/\s+(ЕООД|ООД|ЕАД|АД|ЕТ|СД|КД)$/,'').trim();
+    const hits = await registry.searchByName(q);
+    hits.sort((a, b) => (norm(b.name) === norm(q)) - (norm(a.name) === norm(q)));
+    res.json(hits.slice(0, 10).map(h => ({ ...h, exact: norm(h.name) === norm(q) })));
+  } catch (err) {
+    res.status(err.busy ? 429 : 502).json({ error: err.busy
+      ? 'Търговският регистър ограничава честите заявки — опитайте отново след минута.'
+      : 'Търговският регистър не отговаря в момента. Опитайте след малко.' });
+  }
+});
+
+// GET /api/clients/lookup/:eik — full record + VAT registration (VIES)
+router.get('/lookup/:eik', roleCheck('admin', 'office'), async (req, res) => {
+  if (!/^\d{9}(\d{4})?$/.test(req.params.eik)) return res.status(400).json({ error: 'Невалиден ЕИК' });
+  try {
+    const [rec, vat] = await Promise.all([registry.getByEik(req.params.eik), registry.vies(req.params.eik)]);
+    if (!rec) return res.status(404).json({ error: 'Няма фирма с този ЕИК' });
+    res.json({ ...rec, ...vat });
+  } catch (err) {
+    res.status(err.busy ? 429 : 502).json({ error: err.busy
+      ? 'Търговският регистър ограничава честите заявки — опитайте отново след минута.'
+      : 'Търговският регистър не отговаря в момента. Опитайте след малко.' });
+  }
 });
 
 // GET /api/clients/:id — client card with server-side totals and paginated order history
@@ -81,25 +122,28 @@ router.get('/:id/prices', roleCheck('admin', 'office'), async (req, res) => {
 
 // POST /api/clients
 router.post('/', roleCheck('admin', 'office'), async (req, res) => {
-  const { name, phone, email, address, city, eik, mol, source, notes } = req.body;
+  const { name, phone, email, address, city, eik, mol, source, notes, vat_number, website, legal_name, registry_checked_at } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Името е задължително' });
   const { rows } = await pool.query(
-    `INSERT INTO clients (name, phone, email, address, city, eik, mol, source, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    `INSERT INTO clients (name, phone, email, address, city, eik, mol, source, notes, vat_number, website, legal_name, registry_checked_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
     [name.trim(), phone || null, email || null, address || null, city || null, eik || null, mol || null,
-     source || 'office', notes || null]
+     source || 'office', notes || null, vat_number || null, website || null, legal_name || null,
+     registry_checked_at ? new Date() : null]
   );
   res.status(201).json(rows[0]);
 });
 
 // PATCH /api/clients/:id — only keys present in the body change; '' clears a field
-const FIELDS = ['name', 'phone', 'email', 'address', 'city', 'eik', 'mol', 'source', 'notes', 'active'];
+const FIELDS = ['name', 'phone', 'email', 'address', 'city', 'eik', 'mol', 'source', 'notes', 'active',
+  'vat_number', 'website', 'legal_name', 'registry_checked_at'];
 router.patch('/:id', roleCheck('admin', 'office'), async (req, res) => {
   const sets = [], params = [];
   for (const f of FIELDS) {
     if (!(f in req.body)) continue;
     let v = req.body[f];
     if (f === 'active') v = !!v;
+    else if (f === 'registry_checked_at') v = v ? new Date() : null;
     else if (typeof v === 'string') v = v.trim() || null;
     if (f === 'name' && !v) return res.status(400).json({ error: 'Името е задължително' });
     params.push(v);
@@ -107,6 +151,12 @@ router.patch('/:id', roleCheck('admin', 'office'), async (req, res) => {
   }
   if (!sets.length) return res.status(400).json({ error: 'Няма промени' });
   params.push(req.params.id);
+  if ('name' in req.body) {
+    await pool.query(
+      `INSERT INTO client_aliases (name_key, client_id)
+       SELECT UPPER(REGEXP_REPLACE(TRIM(name), '\\s+', ' ', 'g')), id FROM clients WHERE id=$1
+       ON CONFLICT (name_key) DO UPDATE SET client_id = EXCLUDED.client_id`, [req.params.id]);
+  }
   const { rows } = await pool.query(
     `UPDATE clients SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${params.length} RETURNING *`, params);
   if (!rows[0]) return res.status(404).json({ error: 'Клиентът не е намерен' });
@@ -129,6 +179,12 @@ router.post('/:id/merge', roleCheck('admin', 'office'), async (req, res) => {
       const v = sources.map(s => s[f]).find(Boolean);
       if (!target[f] && v) await client.query(`UPDATE clients SET ${f}=$1 WHERE id=$2`, [v, target.id]);
     }
+    // Remember the duplicates' names so future spreadsheet imports land on this client
+    await client.query(
+      `INSERT INTO client_aliases (name_key, client_id)
+       SELECT UPPER(REGEXP_REPLACE(TRIM(name), '\\s+', ' ', 'g')), $1 FROM clients WHERE id = ANY($2)
+       ON CONFLICT (name_key) DO UPDATE SET client_id = EXCLUDED.client_id`, [target.id, fromIds]);
+    await client.query('UPDATE client_aliases SET client_id=$1 WHERE client_id = ANY($2)', [target.id, fromIds]);
     const moved = await client.query('UPDATE orders SET client_id=$1 WHERE client_id = ANY($2)', [target.id, fromIds]);
     await client.query('UPDATE quotations SET client_id=$1 WHERE client_id = ANY($2)', [target.id, fromIds]);
     await client.query('DELETE FROM clients WHERE id = ANY($1)', [fromIds]);
